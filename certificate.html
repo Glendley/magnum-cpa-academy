@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Certificate of Completion — Magnum CPA Academy</title>
+<link rel="icon" href="images/logo-globe.png">
+<style>
+/* ── Tokens ── */
+:root {
+  --gold: #E8A430;
+  --gold-2: #F3BE68;
+  --green: #3A9A4A;
+  --bg: #0B1929;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  background: var(--bg); color: #fff;
+  min-height: 100vh; display: flex; flex-direction: column;
+  align-items: center; justify-content: flex-start; padding: 40px 16px 60px;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Preview toolbar (hidden on print) ── */
+.preview-bar {
+  display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap;
+  gap: 12px; width: 100%; max-width: 794px; margin-bottom: 20px;
+}
+.preview-bar h2 {
+  font-size: .85rem; letter-spacing: 1.5px; text-transform: uppercase;
+  color: var(--gold); font-weight: 700;
+}
+.preview-actions { display: flex; gap: 10px; }
+.btn-preview-print {
+  background: var(--gold); color: #1a1a1a; border: none; padding: 8px 18px;
+  border-radius: 6px; font-weight: 700; cursor: pointer; font-family: inherit;
+  font-size: .85rem; display: inline-flex; align-items: center; gap: 6px;
+  transition: background .15s;
+}
+.btn-preview-print:hover { background: var(--gold-2); }
+.btn-preview-back {
+  background: transparent; border: 1px solid rgba(255,255,255,.22);
+  color: rgba(255,255,255,.7); padding: 8px 16px; border-radius: 6px;
+  font-size: .85rem; cursor: pointer; font-family: inherit;
+  text-decoration: none; display: inline-flex; align-items: center; gap: 6px;
+  transition: border-color .15s, color .15s;
+}
+.btn-preview-back:hover { border-color: rgba(255,255,255,.5); color: #fff; }
+
+.cert-loading { color: rgba(255,255,255,.6); padding: 80px 0; text-align: center; font-size: .9rem; }
+
+/* ── Certificate — A4 (794 × 1123 px at 96 dpi) ── */
+.cert-wrap {
+  background: #fff;
+  width: 794px; height: 1123px;
+  flex-shrink: 0;
+  border-radius: 4px;
+  padding: 64px 76px;
+  position: relative; overflow: hidden;
+  box-shadow: 0 30px 70px rgba(0,0,0,.65);
+  display: flex; align-items: center; justify-content: center;
+}
+.cert-wrap::before, .cert-wrap::after {
+  content: ""; position: absolute; inset: 14px;
+  border: 1px solid rgba(232,164,48,.5);
+  pointer-events: none; border-radius: 2px;
+}
+.cert-wrap::after { inset: 18px; border-color: rgba(232,164,48,.2); }
+
+.cert-corner { position: absolute; width: 50px; height: 50px; }
+.cert-corner::before, .cert-corner::after { content: ""; position: absolute; background: var(--gold); }
+.cert-corner::before { width: 3px; height: 30px; }
+.cert-corner::after  { width: 30px; height: 3px; }
+.cert-corner.tl { top: 12px; left: 12px; }
+.cert-corner.tl::before { top: 0; left: 0; }
+.cert-corner.tl::after  { top: 0; left: 0; }
+.cert-corner.tr { top: 12px; right: 12px; }
+.cert-corner.tr::before { top: 0; right: 0; }
+.cert-corner.tr::after  { top: 0; right: 0; }
+.cert-corner.bl { bottom: 12px; left: 12px; }
+.cert-corner.bl::before { bottom: 0; left: 0; }
+.cert-corner.bl::after  { bottom: 0; left: 0; }
+.cert-corner.br { bottom: 12px; right: 12px; }
+.cert-corner.br::before { bottom: 0; right: 0; }
+.cert-corner.br::after  { bottom: 0; right: 0; }
+
+.cert-content {
+  text-align: center; position: relative; z-index: 2; width: 100%;
+  display: flex; flex-direction: column; align-items: center;
+}
+
+.cert-logo-wrap {
+  width: 130px; height: 130px; border-radius: 50%; overflow: hidden;
+  margin: 0 auto 28px; border: 3px solid #E8A430;
+  box-shadow: 0 4px 18px rgba(0,0,0,.15);
+}
+.cert-logo-wrap img {
+  width: 100%; height: 100%; object-fit: cover; object-position: center top;
+}
+.cert-presents {
+  font-size: .82rem; letter-spacing: 3px; text-transform: uppercase; color: #80868B;
+}
+.cert-of-completion {
+  font-size: 1rem; letter-spacing: 2px; text-transform: uppercase;
+  color: #E8A430; font-weight: 700; margin: 10px 0 20px;
+}
+.cert-name {
+  font-family: Georgia, 'Times New Roman', serif; font-size: 3rem;
+  color: #202124; font-weight: 400;
+  border-bottom: 1px solid #dadce0; padding-bottom: 14px; margin-bottom: 18px;
+  width: 100%;
+}
+.cert-has-completed { font-size: 1rem; color: #5F6368; margin-bottom: 8px; }
+.cert-course {
+  font-family: Georgia, serif; font-size: 1.55rem;
+  color: #202124; font-weight: 700; margin-bottom: 28px;
+}
+.cert-divider { width: 70px; height: 2px; background: var(--gold); margin: 0 auto 28px; }
+
+.cert-meta { display: flex; justify-content: center; gap: 50px; margin-bottom: 36px; }
+.cert-meta-item { text-align: center; }
+.cert-meta-item .val { font-weight: 700; color: #202124; font-size: 1.05rem; }
+.cert-meta-item .lbl {
+  font-size: .78rem; color: #80868B; letter-spacing: .5px;
+  text-transform: uppercase; margin-top: 4px;
+}
+
+.cert-sig { display: flex; justify-content: center; gap: 60px; margin-top: 10px; }
+.cert-sig-item { text-align: center; }
+.cert-sig-name { font-size: 1rem; font-weight: 700; color: #202124; }
+.cert-sig-role  { font-size: .84rem; color: #4a4f55; margin-top: 3px; }
+
+.cert-trust-badges {
+  display: flex; align-items: center; justify-content: center;
+  gap: 36px; margin-top: 32px; padding-top: 24px;
+  border-top: 1px solid #e8e8e8; width: 100%;
+}
+.cert-trust-badges img { height: 90px; width: auto; object-fit: contain; opacity: .9; }
+
+/* ── Print — A4 ── */
+@media print {
+  @page { size: A4 portrait; margin: 0; }
+  html, body {
+    width: 210mm; height: 297mm;
+    padding: 0; margin: 0; background: #fff;
+    display: block;
+  }
+  .preview-bar { display: none !important; }
+  .cert-wrap {
+    width: 210mm; height: 297mm;
+    box-shadow: none; border-radius: 0;
+    padding: 18mm 20mm;
+    margin: 0;
+  }
+}
+</style>
+</head>
+<body>
+
+<!-- Preview toolbar -->
+<div class="preview-bar">
+  <h2>&#128065; Certificate Preview</h2>
+  <div class="preview-actions">
+    <button class="btn-preview-print" onclick="window.print()">&#128424; Print / Save as PDF</button>
+    <a class="btn-preview-back" href="app.html#certificates">&larr; My certificates</a>
+  </div>
+</div>
+
+<div class="cert-loading" id="cert-loading">Loading certificate…</div>
+
+<!-- Certificate -->
+<div class="cert-wrap" id="cert-wrap" style="display:none">
+  <div class="cert-corner tl"></div>
+  <div class="cert-corner tr"></div>
+  <div class="cert-corner bl"></div>
+  <div class="cert-corner br"></div>
+
+  <div class="cert-content">
+
+    <div class="cert-logo-wrap">
+      <img src="images/max-about-us-2.jpg" alt="Max Drew, CPA">
+    </div>
+
+    <div class="cert-presents">This is to certify that</div>
+    <div class="cert-name" id="certName">&nbsp;</div>
+    <div class="cert-has-completed">has successfully completed the course</div>
+    <div class="cert-of-completion">Certificate of Completion</div>
+    <div class="cert-course" id="certCourse">&nbsp;</div>
+    <div class="cert-divider"></div>
+
+    <div class="cert-meta">
+      <div class="cert-meta-item">
+        <div class="val" id="certDate"></div>
+        <div class="lbl">Date Completed</div>
+      </div>
+      <div class="cert-meta-item">
+        <div class="val" id="certModules"></div>
+        <div class="lbl">Completed</div>
+      </div>
+      <div class="cert-meta-item">
+        <div class="val" id="certScore"></div>
+        <div class="lbl">Score on Knowledge Check</div>
+      </div>
+    </div>
+
+    <div class="cert-sig">
+      <div class="cert-sig-item">
+        <div style="width:140px;height:1px;background:#dadce0;margin:0 auto 8px"></div>
+        <div class="cert-sig-name">Max Drew, CPA</div>
+        <div class="cert-sig-role">Instructor &middot; Magnum CPA Academy</div>
+      </div>
+    </div>
+
+    <div class="cert-trust-badges">
+      <img src="images/bbb.jpg" alt="BBB Accredited Business">
+      <img src="images/google-2.png" alt="Google Reviews">
+      <img src="images/ramsey.jpg" alt="Ramsey Trusted">
+    </div>
+
+  </div>
+</div>
+
+<script src="js/config.js"></script>
+<script src="js/mockapi.js"></script>
+<script src="js/util.js"></script>
+<script src="js/api.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/certificate.js"></script>
+</body>
+</html>

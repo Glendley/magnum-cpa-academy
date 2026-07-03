@@ -1,0 +1,22 @@
+# Videos are far too large for GitHub (100 MB file limit).
+# Host course videos on Google Drive or YouTube and paste the link
+# into the course builder instead.
+video/
+
+# Only the lowercase-named images below are used by the site.
+# The original mixed-case exports stay local to keep the repo lean.
+images/*
+!images/logo-globe.png
+!images/org-chart.png
+!images/bbb.jpg
+!images/google-2.png
+!images/ramsey.jpg
+!images/max-about-us-2.jpg
+
+# Local dev tooling (not part of the site)
+.claude/
+
+# OS noise
+Thumbs.db
+Desktop.ini
+.DS_Store

@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sign in — Magnum CPA Academy</title>
+<link rel="icon" href="images/logo-globe.png">
+<link rel="stylesheet" href="css/theme.css">
+<link rel="stylesheet" href="css/portal.css">
+</head>
+<body class="login-page">
+
+<div class="login-card">
+  <div class="login-logo">
+    <img src="images/logo-globe.png" alt="Magnum CPA">
+    <h1>Magnum CPA</h1>
+    <div class="tagline">Academy</div>
+  </div>
+
+  <div class="login-error" id="login-error"></div>
+
+  <form id="login-form" autocomplete="on">
+    <div class="field">
+      <label for="login-email">Email</label>
+      <input class="input" type="email" id="login-email" placeholder="you@magnumcpa.com"
+             autocomplete="username" required>
+    </div>
+    <div class="field">
+      <label for="login-password">Password</label>
+      <input class="input" type="password" id="login-password" placeholder="••••••••"
+             autocomplete="current-password" required>
+    </div>
+    <button class="btn btn-block btn-lg" type="submit" id="login-btn">Sign in</button>
+  </form>
+
+  <div class="login-footer" id="login-footer">
+    Employee access is created by your administrator.
+  </div>
+</div>
+
+<script src="js/config.js"></script>
+<script src="js/mockapi.js"></script>
+<script src="js/util.js"></script>
+<script src="js/api.js"></script>
+<script src="js/auth.js"></script>
+<script>
+(function () {
+  // Already signed in? Go straight to the right portal.
+  var user = getUserCached();
+  if (getToken() && user) {
+    window.location.replace(user.role === 'admin' ? 'admin.html' : 'app.html');
+    return;
+  }
+
+  if (isMockMode()) {
+    document.getElementById('login-footer').innerHTML =
+      'Demo mode — data stays in this browser.<br>Sign in with <b>glenn@magnumcpa.com</b> / <b>ChangeMe123!</b>';
+  }
+
+  var form = document.getElementById('login-form');
+  var errorBox = document.getElementById('login-error');
+
+  form.addEventListener('submit', async function (e) {
+    e.preventDefault();
+    errorBox.classList.remove('show');
+    var btn = document.getElementById('login-btn');
+    setBusy(btn, true, 'Signing in…');
+    try {
+      var result = await api('login', {
+        email: document.getElementById('login-email').value,
+        password: document.getElementById('login-password').value
+      });
+      setToken(result.token);
+      setUserCached(result.user);
+      if (result.mustChangePassword) {
+        sessionStorage.setItem('mca_force_pw', '1');
+      }
+      window.location.href = result.user.role === 'admin' ? 'admin.html' : 'app.html';
+    } catch (err) {
+      errorBox.textContent = err.message;
+      errorBox.classList.add('show');
+      setBusy(btn, false);
+    }
+  });
+})();
+</script>
+</body>
+</html>

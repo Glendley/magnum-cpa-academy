@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Magnum CPA Academy</title>
+<link rel="icon" href="images/logo-globe.png">
+<link rel="stylesheet" href="css/theme.css">
+<link rel="stylesheet" href="css/portal.css">
+</head>
+<body class="employee-shell">
+
+<!-- Hover-expand navigation rail -->
+<nav class="nav-rail" id="nav-rail">
+  <div class="rail-logo">
+    <img src="images/logo-globe.png" alt="">
+    <div class="rail-title">Magnum CPA<span>Academy</span></div>
+  </div>
+  <div class="rail-items">
+    <button class="nav-item" data-tab="updates">
+      <span class="nav-icon">&#128227;</span><span class="nav-label">Updates</span>
+    </button>
+    <button class="nav-item" data-tab="courses">
+      <span class="nav-icon">&#127891;</span><span class="nav-label">Courses</span>
+    </button>
+    <button class="nav-item" data-tab="certificates">
+      <span class="nav-icon">&#127942;</span><span class="nav-label">Certificates</span>
+    </button>
+    <button class="nav-item" data-tab="links">
+      <span class="nav-icon">&#128279;</span><span class="nav-label">Links</span>
+    </button>
+    <button class="nav-item" data-tab="orgchart">
+      <span class="nav-icon">&#128101;</span><span class="nav-label">Organizational Chart</span>
+    </button>
+  </div>
+  <div class="rail-bottom">
+    <button class="nav-item" id="rail-logout">
+      <span class="nav-icon">&#10162;</span><span class="nav-label">Log out</span>
+    </button>
+  </div>
+</nav>
+
+<header class="topbar">
+  <div class="brand">
+    <div>
+      <span class="brand-name" id="brand-title">Magnum CPA Academy</span>
+      <span class="brand-sub" id="tab-crumb">Updates</span>
+    </div>
+  </div>
+  <div id="topbar-user"></div>
+</header>
+
+<main class="employee-main" id="main">
+  <div class="loading-block"><div class="spinner"></div>Loading…</div>
+</main>
+
+<script src="js/config.js"></script>
+<script src="js/mockapi.js"></script>
+<script src="js/util.js"></script>
+<script src="js/api.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin — Magnum CPA Academy</title>
+<link rel="icon" href="images/logo-globe.png">
+<link rel="stylesheet" href="css/theme.css">
+<link rel="stylesheet" href="css/portal.css">
+</head>
+<body class="admin-shell">
+
+<nav class="admin-sidebar">
+  <div class="rail-logo">
+    <img src="images/logo-globe.png" alt="">
+    <div class="rail-title">Magnum CPA<span>Admin</span></div>
+  </div>
+  <div class="rail-items">
+    <button class="nav-item" data-tab="courses">
+      <span class="nav-icon">&#127891;</span><span class="nav-label">Courses</span>
+    </button>
+    <button class="nav-item" data-tab="updates">
+      <span class="nav-icon">&#128227;</span><span class="nav-label">Updates</span>
+    </button>
+    <button class="nav-item" data-tab="tracking">
+      <span class="nav-icon">&#128202;</span><span class="nav-label">Tracking</span>
+    </button>
+    <button class="nav-item" data-tab="employees">
+      <span class="nav-icon">&#128101;</span><span class="nav-label">Employees</span>
+    </button>
+    <button class="nav-item" data-tab="links">
+      <span class="nav-icon">&#128279;</span><span class="nav-label">Links</span>
+    </button>
+    <button class="nav-item" data-tab="settings">
+      <span class="nav-icon">&#9881;&#65039;</span><span class="nav-label">Settings</span>
+    </button>
+  </div>
+  <div class="rail-bottom">
+    <button class="nav-item" id="rail-employee-view">
+      <span class="nav-icon">&#128065;</span><span class="nav-label">Employee view</span>
+    </button>
+    <button class="nav-item" id="rail-logout">
+      <span class="nav-icon">&#10162;</span><span class="nav-label">Log out</span>
+    </button>
+  </div>
+</nav>
+
+<header class="topbar">
+  <div class="brand">
+    <div>
+      <span class="brand-name">Administration</span>
+      <span class="brand-sub" id="tab-crumb">Courses</span>
+    </div>
+  </div>
+  <div id="topbar-user"></div>
+</header>
+
+<main class="admin-main" id="main">
+  <div class="loading-block"><div class="spinner"></div>Loading…</div>
+</main>
+
+<script src="js/config.js"></script>
+<script src="js/mockapi.js"></script>
+<script src="js/util.js"></script>
+<script src="js/api.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/admin.js"></script>
+</body>
+</html>
