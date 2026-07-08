@@ -40,7 +40,6 @@
     });
     document.getElementById('tab-crumb').textContent = TAB_TITLES[tab];
 
-    if (tab === 'courses' && parts[1] === 'edit') return renderCourseBuilder(parts[2] === 'new' ? null : parts[2]);
     if (tab === 'courses') return renderCourseList();
     if (tab === 'updates') return renderUpdates();
     if (tab === 'tracking') return renderTracking();
@@ -124,12 +123,12 @@
     var html =
       '<div class="row-between mb-24">' +
       '  <div><h1 class="page-title">Courses</h1>' +
-      '  <p class="page-sub" style="margin-bottom:0">Create, publish, close and manage training courses.</p></div>' +
+      '  <p class="page-sub" style="margin-bottom:0">Courses are authored as files in the <code>Courses/</code> folder and pushed live. Publish, close and track them here.</p></div>' +
       '  <button class="btn" id="btn-new-course">+ New course</button>' +
       '</div>';
 
     if (!courses.length) {
-      html += emptyState('&#127891;', 'No courses yet', 'Click “New course” to build your first training course.');
+      html += emptyState('&#127891;', 'No courses yet', 'Click “New course” for how to add your first training course.');
     } else {
       html += '<div class="table-wrap"><table class="table"><thead><tr>' +
         '<th>Course</th><th>Status</th><th>Tasks</th><th>Questions</th><th>Registration form</th><th style="width:340px">Actions</th>' +
@@ -154,9 +153,7 @@
     }
     main.innerHTML = html;
 
-    document.getElementById('btn-new-course').addEventListener('click', function () {
-      window.location.hash = 'courses/edit/new';
-    });
+    document.getElementById('btn-new-course').addEventListener('click', openNewCourseHelp);
 
     main.querySelectorAll('[data-act]').forEach(function (btn) {
       btn.addEventListener('click', async function () {
@@ -164,7 +161,7 @@
         var course = courses.find(function (c) { return c.courseId === id; });
         var act = btn.dataset.act;
 
-        if (act === 'edit') { window.location.hash = 'courses/edit/' + id; return; }
+        if (act === 'edit') { openCourseDetail(course); return; }
 
         if (act === 'notify') { notifyPrompt('course', course.title, course.description, 'app.html#courses'); return; }
 
@@ -206,298 +203,64 @@
   }
 
   /* ════════════════════════════════════════════
-     COURSES — builder
+     COURSES — file-based authoring (no in-browser builder)
+     Course content lives in Courses/<slug>/ as course.js +
+     knowledge-check.js; Claude reads those files and pushes them
+     live via adminSaveCourse. These two helpers just explain that
+     workflow and show what's currently live, read-only.
      ════════════════════════════════════════════ */
 
-  var builder = null; // { courseId, title, description, registrationFormUrl, passThresholdPct, status, tasks[], quiz[] }
+  function slugify(title) {
+    return String(title || '').toLowerCase().trim()
+      .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  }
 
-  async function renderCourseBuilder(courseId) {
-    main.innerHTML = loadingBlock('Loading course builder…');
+  function openNewCourseHelp() {
+    var overlay = openModal(
+      '<h3>Adding a new course</h3>' +
+      '<p class="modal-sub">Courses are authored as files, not through a web form.</p>' +
+      '<ol style="padding-left:20px;line-height:1.8">' +
+      '  <li>Copy the <code>Courses/TEMPLATE</code> folder and rename it to a short slug (e.g. <code>payroll-basics</code>).</li>' +
+      '  <li>Edit <code>course.js</code> (title, tasks, video links, lesson content) and <code>knowledge-check.js</code> (10–15 questions) in that folder.</li>' +
+      '  <li>Ask Claude to push the course live — it appears below as a draft for you to review, then publish.</li>' +
+      '</ol>' +
+      '<div class="modal-actions"><button class="btn" data-close>Got it</button></div>'
+    );
+    overlay.querySelector('[data-close]').addEventListener('click', function () { overlay.remove(); });
+  }
+
+  async function openCourseDetail(course) {
+    var overlay = openModal(
+      '<h3>' + escapeHtml(course.title) + '</h3>' +
+      '<p class="modal-sub">Authored from <code>Courses/' + escapeHtml(slugify(course.title)) + '/</code> — edit those files and ask Claude to push updates; this view is read-only.</p>' +
+      '<div id="cd-body">' + loadingBlock('Loading course details…') + '</div>' +
+      '<div class="modal-actions"><button class="btn btn-ghost" data-close>Close</button></div>',
+      { wide: true }
+    );
+    overlay.querySelector('[data-close]').addEventListener('click', function () { overlay.remove(); });
+
     try {
-      if (courseId) {
-        var full = await api('adminGetCourseFull', { courseId: courseId });
-        builder = {
-          courseId: courseId,
-          title: full.meta.title, description: full.meta.description,
-          registrationFormUrl: full.meta.registrationFormUrl,
-          passThresholdPct: full.meta.passThresholdPct, status: full.meta.status,
-          tasks: full.tasks.map(function (t) {
-            return { taskId: t.taskId, title: t.title, videoUrl: t.video ? t.video.src : '',
-                     durationSec: t.video && t.video.durationSec ? t.video.durationSec : 0,
-                     contentHtml: t.contentHtml };
-          }),
-          quiz: full.quiz
-        };
-      } else {
-        var settings = await getSettings();
-        builder = {
-          courseId: null, title: '', description: '', registrationFormUrl: '',
-          passThresholdPct: Number(settings.defaultPassThreshold) || 85,
-          status: 'draft', tasks: [], quiz: []
-        };
-      }
-      paintBuilder();
+      var full = await api('adminGetCourseFull', { courseId: course.courseId });
+      var body = overlay.querySelector('#cd-body');
+      body.innerHTML =
+        '<div class="row-between mb-8"><h4 style="font-size:0.95rem">Tasks (' + full.tasks.length + ')</h4></div>' +
+        (full.tasks.length ? '<div class="table-wrap mb-16"><table class="table"><thead><tr><th>#</th><th>Title</th><th>Video</th></tr></thead><tbody>' +
+          full.tasks.map(function (t, i) {
+            var kind = t.video ? t.video.type : 'none';
+            return '<tr><td>' + (i + 1) + '</td><td>' + escapeHtml(t.title) + '</td><td>' +
+              (kind === 'drive' ? '&#128193; Drive' : kind === 'youtube' ? '&#9654; YouTube' : kind === 'mp4' ? '&#127916; File' : '<span class="muted">missing</span>') +
+              '</td></tr>';
+          }).join('') + '</tbody></table></div>'
+          : '<p class="muted small mb-16">No tasks yet.</p>') +
+        '<div class="row-between mb-8"><h4 style="font-size:0.95rem">Knowledge check</h4>' + quizCountPillReadOnly(full.quiz.length) + '</div>';
     } catch (err) {
-      main.innerHTML = emptyState('&#9888;&#65039;', 'Could not open the builder', err.message);
+      overlay.querySelector('#cd-body').innerHTML = '<p style="color:#f2a49b">' + escapeHtml(err.message) + '</p>';
     }
   }
 
-  function quizCountPill() {
-    var n = builder.quiz.length;
+  function quizCountPillReadOnly(n) {
     var cls = n >= 10 && n <= 15 ? 'ok' : (n === 0 ? '' : 'bad');
     return '<span class="quiz-count-pill ' + cls + '">' + n + ' / 10–15 questions</span>';
-  }
-
-  function paintBuilder() {
-    var b = builder;
-    main.innerHTML =
-      '<button class="btn btn-ghost btn-sm mb-16" id="builder-back">&larr; All courses</button>' +
-      '<div class="row-between mb-16">' +
-      '  <h1 class="page-title" style="margin:0">' + (b.courseId ? 'Edit course' : 'New course') + '</h1>' +
-      '  <div>' + statusBadge(b.status) + '</div>' +
-      '</div>' +
-
-      '<div class="card mb-16">' +
-      '  <div class="field"><label>Course title</label>' +
-      '    <input class="input" id="cb-title" maxlength="120" placeholder="e.g. Professional Communication Skills" value="' + escapeHtml(b.title) + '"></div>' +
-      '  <div class="field"><label>Description</label>' +
-      '    <textarea class="textarea" id="cb-desc" rows="2" placeholder="Short description employees see in the catalog">' + escapeHtml(b.description) + '</textarea></div>' +
-      '  <div class="row" style="align-items:flex-start;flex-wrap:wrap">' +
-      '    <div class="field grow" style="min-width:280px"><label>Registration Google Form URL</label>' +
-      '      <input class="input" id="cb-form" placeholder="https://docs.google.com/forms/…" value="' + escapeHtml(b.registrationFormUrl) + '">' +
-      '      <div class="hint">Employees must submit this form before starting the course.</div></div>' +
-      '    <div class="field" style="width:170px"><label>Pass score (%)</label>' +
-      '      <input class="input" id="cb-threshold" type="number" min="50" max="100" value="' + escapeHtml(b.passThresholdPct) + '">' +
-      '      <div class="hint">Default 85%</div></div>' +
-      '  </div>' +
-      '</div>' +
-
-      '<div class="row-between mb-8"><h2 style="font-size:1.1rem">Tasks</h2>' +
-      '<button class="btn btn-sm" id="cb-add-task">+ Add task</button></div>' +
-      '<p class="muted small mb-16">Each task starts with a short video; after watching, the employee clicks “Next” and reads the subtask presentation. Tasks unlock in order.</p>' +
-      '<div id="cb-tasks">' + (b.tasks.length ? b.tasks.map(taskEditorHtml).join('') :
-        '<div class="empty-state" style="padding:26px"><p>No tasks yet — add the first one.</p></div>') + '</div>' +
-
-      '<div class="row-between mb-8 mt-24"><h2 style="font-size:1.1rem">Knowledge check</h2>' +
-      '<div class="row">' + quizCountPill() +
-      '<button class="btn btn-sm" id="cb-add-q">+ Add question</button></div></div>' +
-      '<p class="muted small mb-16">10–15 multiple-choice questions. Select the radio button next to the correct answer. Employees must score at least the pass score to earn their certificate. Correct answers are never sent to the employee’s browser.</p>' +
-      '<div id="cb-quiz">' + (b.quiz.length ? b.quiz.map(questionEditorHtml).join('') :
-        '<div class="empty-state" style="padding:26px"><p>No questions yet.</p></div>') + '</div>' +
-
-      '<div class="row mt-24" style="justify-content:flex-end;gap:10px">' +
-      '  <button class="btn btn-ghost" id="cb-save">' + (b.status === 'open' ? 'Save changes' : 'Save draft') + '</button>' +
-      (b.status !== 'open' ? '<button class="btn btn-green" id="cb-publish">Save &amp; publish</button>' : '') +
-      '</div>';
-
-    document.getElementById('builder-back').addEventListener('click', function () {
-      window.location.hash = 'courses';
-    });
-    document.getElementById('cb-add-task').addEventListener('click', function () {
-      collectBuilderInputs();
-      builder.tasks.push({ taskId: '', title: '', videoUrl: '', durationSec: 0, contentHtml: '' });
-      paintBuilder();
-      var items = main.querySelectorAll('#cb-tasks .builder-item');
-      if (items.length) items[items.length - 1].scrollIntoView({ behavior: 'smooth', block: 'center' });
-    });
-    document.getElementById('cb-add-q').addEventListener('click', function () {
-      collectBuilderInputs();
-      builder.quiz.push({ qId: '', text: '', choices: ['', '', '', ''], correctIndex: -1 });
-      paintBuilder();
-      var items = main.querySelectorAll('#cb-quiz .builder-item');
-      if (items.length) items[items.length - 1].scrollIntoView({ behavior: 'smooth', block: 'center' });
-    });
-    document.getElementById('cb-save').addEventListener('click', function () { saveCourse(this, null); });
-    var pub = document.getElementById('cb-publish');
-    if (pub) pub.addEventListener('click', function () { saveCourse(this, 'open'); });
-
-    wireBuilderEvents();
-  }
-
-  function taskEditorHtml(t, i) {
-    var video = parseVideo(t.videoUrl);
-    var videoHint = !t.videoUrl ? 'Paste a Google Drive share link, YouTube link, or direct .mp4 URL.'
-      : video ? (video.type === 'drive'
-          ? '&#9989; Google Drive video detected — make sure sharing is “Anyone with the link”. Enter the video length below.'
-          : video.type === 'youtube' ? '&#9989; YouTube video detected.' : '&#9989; Direct video file detected.')
-      : '&#10060; This link is not recognized as a video. Use Google Drive, YouTube or a direct .mp4 URL.';
-    return '<div class="builder-item" data-task="' + i + '">' +
-      '<div class="builder-item-head"><span class="num">' + (i + 1) + '</span>' +
-      '<h4>Task ' + (i + 1) + '</h4>' +
-      '<button class="icon-btn" data-tmove="up" title="Move up"' + (i === 0 ? ' disabled' : '') + '>&#9650;</button>' +
-      '<button class="icon-btn" data-tmove="down" title="Move down">&#9660;</button>' +
-      '<button class="icon-btn danger" data-tdel title="Remove task">&#128465;</button></div>' +
-      '<div class="field"><label>Task title</label>' +
-      '<input class="input" data-tfield="title" maxlength="120" placeholder="e.g. Professional Email" value="' + escapeHtml(t.title) + '"></div>' +
-      '<div class="row" style="align-items:flex-start;flex-wrap:wrap">' +
-      '  <div class="field grow" style="min-width:280px"><label>Video link</label>' +
-      '    <input class="input" data-tfield="videoUrl" placeholder="https://drive.google.com/file/d/… or https://youtu.be/…" value="' + escapeHtml(t.videoUrl) + '">' +
-      '    <div class="hint">' + videoHint + '</div></div>' +
-      '  <div class="field" style="width:190px"><label>Video length (minutes)</label>' +
-      '    <input class="input" data-tfield="durationMin" type="number" min="0" step="0.5" value="' + (t.durationSec ? (Math.round(t.durationSec / 6) / 10) : '') + '">' +
-      '    <div class="hint">Required for Google Drive videos</div></div>' +
-      '</div>' +
-      '<div class="field" style="margin-bottom:0"><label>Subtask — presentation / context (shown after the video)</label>' +
-      '<textarea class="textarea" data-tfield="contentHtml" rows="5" placeholder="Write the lesson content. Plain text works; HTML (<h2>, <ul>, <img>, …) is also supported.">' + escapeHtml(t.contentHtml) + '</textarea></div>' +
-      '</div>';
-  }
-
-  function questionEditorHtml(q, i) {
-    return '<div class="builder-item" data-q="' + i + '">' +
-      '<div class="builder-item-head"><span class="num">' + (i + 1) + '</span>' +
-      '<h4>Question ' + (i + 1) + '</h4>' +
-      '<button class="icon-btn danger" data-qdel title="Remove question">&#128465;</button></div>' +
-      '<div class="field"><label>Question</label>' +
-      '<input class="input" data-qfield="text" placeholder="Type the question" value="' + escapeHtml(q.text) + '"></div>' +
-      '<label class="small muted" style="display:block;margin-bottom:8px">Choices — select the correct one:</label>' +
-      q.choices.map(function (choice, ci) {
-        return '<div class="choice-row">' +
-          '<input type="radio" name="correct-' + i + '" data-qcorrect="' + ci + '"' + (Number(q.correctIndex) === ci ? ' checked' : '') + ' title="Mark as correct answer">' +
-          '<input class="input" data-qchoice="' + ci + '" placeholder="Choice ' + (ci + 1) + '" value="' + escapeHtml(choice) + '">' +
-          (q.choices.length > 2 ? '<button class="icon-btn danger" data-qchoicedel="' + ci + '" title="Remove choice">&times;</button>' : '') +
-          '</div>';
-      }).join('') +
-      (q.choices.length < 6 ? '<button class="btn btn-ghost btn-sm mt-8" data-qaddchoice>+ Add choice</button>' : '') +
-      '</div>';
-  }
-
-  /** Reads all builder inputs back into the state object. */
-  function collectBuilderInputs() {
-    var b = builder;
-    var get = function (id) { var el = document.getElementById(id); return el ? el.value : ''; };
-    b.title = get('cb-title').trim();
-    b.description = get('cb-desc').trim();
-    b.registrationFormUrl = get('cb-form').trim();
-    b.passThresholdPct = Number(get('cb-threshold')) || 85;
-
-    main.querySelectorAll('#cb-tasks .builder-item').forEach(function (item, i) {
-      var t = b.tasks[i];
-      if (!t) return;
-      t.title = item.querySelector('[data-tfield="title"]').value.trim();
-      t.videoUrl = item.querySelector('[data-tfield="videoUrl"]').value.trim();
-      var min = parseFloat(item.querySelector('[data-tfield="durationMin"]').value);
-      t.durationSec = isNaN(min) ? 0 : Math.round(min * 60);
-      t.contentHtml = item.querySelector('[data-tfield="contentHtml"]').value;
-    });
-    main.querySelectorAll('#cb-quiz .builder-item').forEach(function (item, i) {
-      var q = b.quiz[i];
-      if (!q) return;
-      q.text = item.querySelector('[data-qfield="text"]').value.trim();
-      q.choices = Array.prototype.map.call(item.querySelectorAll('[data-qchoice]'), function (inp) {
-        return inp.value;
-      });
-      var checked = item.querySelector('[data-qcorrect]:checked');
-      q.correctIndex = checked ? Number(checked.dataset.qcorrect) : -1;
-    });
-  }
-
-  function wireBuilderEvents() {
-    main.querySelectorAll('#cb-tasks .builder-item').forEach(function (item, i) {
-      item.querySelector('[data-tdel]').addEventListener('click', function () {
-        if (!confirm('Remove task ' + (i + 1) + '?')) return;
-        collectBuilderInputs();
-        builder.tasks.splice(i, 1);
-        paintBuilder();
-      });
-      item.querySelectorAll('[data-tmove]').forEach(function (btn) {
-        btn.addEventListener('click', function () {
-          collectBuilderInputs();
-          var j = btn.dataset.tmove === 'up' ? i - 1 : i + 1;
-          if (j < 0 || j >= builder.tasks.length) return;
-          var tmp = builder.tasks[i];
-          builder.tasks[i] = builder.tasks[j];
-          builder.tasks[j] = tmp;
-          paintBuilder();
-        });
-      });
-      // refresh the video hint when the link changes
-      item.querySelector('[data-tfield="videoUrl"]').addEventListener('change', function () {
-        collectBuilderInputs();
-        paintBuilder();
-      });
-    });
-
-    main.querySelectorAll('#cb-quiz .builder-item').forEach(function (item, i) {
-      item.querySelector('[data-qdel]').addEventListener('click', function () {
-        if (!confirm('Remove question ' + (i + 1) + '?')) return;
-        collectBuilderInputs();
-        builder.quiz.splice(i, 1);
-        paintBuilder();
-      });
-      var addChoice = item.querySelector('[data-qaddchoice]');
-      if (addChoice) addChoice.addEventListener('click', function () {
-        collectBuilderInputs();
-        builder.quiz[i].choices.push('');
-        paintBuilder();
-      });
-      item.querySelectorAll('[data-qchoicedel]').forEach(function (btn) {
-        btn.addEventListener('click', function () {
-          collectBuilderInputs();
-          var ci = Number(btn.dataset.qchoicedel);
-          var q = builder.quiz[i];
-          q.choices.splice(ci, 1);
-          if (q.correctIndex === ci) q.correctIndex = -1;
-          else if (q.correctIndex > ci) q.correctIndex -= 1;
-          paintBuilder();
-        });
-      });
-    });
-  }
-
-  async function saveCourse(btn, publishStatus) {
-    collectBuilderInputs();
-    var b = builder;
-    if (!b.title) { toast('Enter a course title.', 'error'); return; }
-
-    // client-side validation mirrors the server so errors are friendly
-    for (var i = 0; i < b.tasks.length; i++) {
-      var t = b.tasks[i];
-      if (t.videoUrl && !parseVideo(t.videoUrl)) {
-        toast('Task ' + (i + 1) + ': the video link is not recognized.', 'error');
-        return;
-      }
-      var v = parseVideo(t.videoUrl);
-      if (v && v.type === 'drive' && !t.durationSec && (publishStatus === 'open' || b.status === 'open')) {
-        toast('Task ' + (i + 1) + ': enter the video length (needed for Google Drive videos).', 'error');
-        return;
-      }
-    }
-
-    var status = publishStatus || b.status || 'draft';
-    var payload = {
-      course: {
-        courseId: b.courseId, title: b.title, description: b.description,
-        registrationFormUrl: b.registrationFormUrl, passThresholdPct: b.passThresholdPct,
-        status: status,
-        tasks: b.tasks.map(function (t) {
-          var video = parseVideo(t.videoUrl);
-          if (video) video.durationSec = t.durationSec || 0;
-          return { taskId: t.taskId || undefined, title: t.title, video: video,
-                   contentHtml: textToHtml(t.contentHtml) };
-        }),
-        quiz: b.quiz.map(function (q) {
-          return { qId: q.qId || undefined, text: q.text,
-                   choices: q.choices.filter(function (c) { return String(c).trim() !== ''; }),
-                   correctIndex: q.correctIndex };
-        })
-      }
-    };
-
-    setBusy(btn, true, 'Saving…');
-    try {
-      var res = await api('adminSaveCourse', payload);
-      builder.courseId = res.courseId;
-      builder.status = status;
-      invalidateCache();
-      toast(publishStatus === 'open' ? 'Course published!' : 'Course saved.', 'success');
-      if (publishStatus === 'open') {
-        await notifyPrompt('course', b.title, b.description, 'app.html#courses');
-      }
-      window.location.hash = 'courses';
-    } catch (err) {
-      toast(err.message, 'error');
-      setBusy(btn, false);
-    }
   }
 
   /* ════════════════════════════════════════════
