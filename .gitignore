@@ -13,6 +13,15 @@ images/*
 !images/ramsey.jpg
 !images/max-about-us-2.jpg
 
+# Knowledge Check answer keys contain correct answers — this repo is
+# public (GitHub Pages requires a paid plan to publish from a private
+# repo), so these stay local-only. Claude reads them locally and
+# uploads the answers straight into the Google Sheet backend; they
+# never reach GitHub. The TEMPLATE copy is a harmless empty
+# placeholder and stays tracked as a reference for the file format.
+Courses/*/knowledge-check.js
+!Courses/TEMPLATE/knowledge-check.js
+
 # Local dev tooling (not part of the site)
 .claude/
 
