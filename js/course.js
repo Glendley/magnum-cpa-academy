@@ -313,13 +313,31 @@
     if (ytPlayer && ytPlayer.destroy) { try { ytPlayer.destroy(); } catch (e) {} ytPlayer = null; }
   }
 
+  /**
+   * Browsers only allow unmuted autoplay when it's tied to a user gesture
+   * (which most task transitions here are — a click). Try unmuted first;
+   * if the browser blocks it, fall back to muted so playback always
+   * starts at least visually, and the employee can unmute with one click.
+   */
+  function attemptAutoplay(mediaEl) {
+    var p = mediaEl.play();
+    if (p && p.catch) {
+      p.catch(function () {
+        mediaEl.muted = true;
+        mediaEl.play().catch(function () {});
+      });
+    }
+  }
+
   function mountVideo(video, onEnded) {
     clearGate();
     var host = document.getElementById('video-shell');
 
     if (video.type === 'mp4') {
-      host.innerHTML = '<video controls preload="metadata" src="' + escapeHtml(video.embed) + '"></video>';
-      host.querySelector('video').addEventListener('ended', onEnded);
+      host.innerHTML = '<video controls autoplay playsinline preload="auto" src="' + escapeHtml(video.embed) + '"></video>';
+      var videoEl = host.querySelector('video');
+      videoEl.addEventListener('ended', onEnded);
+      attemptAutoplay(videoEl);
       return;
     }
 
@@ -329,8 +347,21 @@
       loadYouTubeApi(function () {
         ytPlayer = new YT.Player(holderId, {
           videoId: video.videoId,
-          playerVars: { rel: 0, modestbranding: 1 },
+          playerVars: { rel: 0, modestbranding: 1, autoplay: 1, playsinline: 1 },
           events: {
+            onReady: function (e) {
+              try { e.target.playVideo(); } catch (err) {}
+              // If the browser blocked unmuted autoplay, the state won't
+              // have advanced to "playing" shortly after — mute and retry.
+              setTimeout(function () {
+                try {
+                  if (e.target.getPlayerState() !== 1) {
+                    e.target.mute();
+                    e.target.playVideo();
+                  }
+                } catch (err) {}
+              }, 700);
+            },
             onStateChange: function (e) {
               if (e.data === YT.PlayerState.ENDED) onEnded();
             }
@@ -340,8 +371,10 @@
       return;
     }
 
-    // Google Drive preview iframe: no end event exists, so gate on time.
-    host.innerHTML = '<iframe src="' + escapeHtml(video.embed) + '" allow="autoplay; fullscreen" allowfullscreen></iframe>';
+    // Google Drive preview iframe: no end event and no reliable autoplay
+    // control (best-effort query param only) — gate stays purely on time.
+    var driveSrc = video.embed + (video.embed.indexOf('?') === -1 ? '?' : '&') + 'autoplay=1';
+    host.innerHTML = '<iframe src="' + escapeHtml(driveSrc) + '" allow="autoplay; fullscreen" allowfullscreen></iframe>';
     var gateMsg = document.getElementById('gate-msg');
     var waitSec = Math.max(Math.round((video.durationSec || 0) * 0.85), 30);
     var left = waitSec;
