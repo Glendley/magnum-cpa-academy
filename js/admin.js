@@ -131,7 +131,7 @@
       html += emptyState('&#127891;', 'No courses yet', 'Click “New course” for how to add your first training course.');
     } else {
       html += '<div class="table-wrap"><table class="table"><thead><tr>' +
-        '<th>Course</th><th>Status</th><th>Tasks</th><th>Questions</th><th>Registration form</th><th style="width:340px">Actions</th>' +
+        '<th>Course</th><th>Status</th><th>Tasks</th><th>Questions</th><th>Registration form</th><th style="width:410px">Actions</th>' +
         '</tr></thead><tbody>' +
         courses.map(function (c) {
           return '<tr>' +
@@ -142,6 +142,7 @@
             '<td class="small">' + (c.registrationFormUrl ? '<a href="' + escapeHtml(c.registrationFormUrl) + '" target="_blank" rel="noopener">Google Form &#8599;</a>' : '<span class="muted">—</span>') + '</td>' +
             '<td>' +
             '  <button class="btn btn-ghost btn-sm" data-act="edit" data-id="' + escapeHtml(c.courseId) + '">Edit</button> ' +
+            '  <a class="btn btn-ghost btn-sm" href="course.html?id=' + encodeURIComponent(c.courseId) + '&preview=1" target="_blank" rel="noopener" title="See it exactly as an employee would — nothing is saved">Preview</a> ' +
             (c.status !== 'open'
               ? '<button class="btn btn-green btn-sm" data-act="publish" data-id="' + escapeHtml(c.courseId) + '">' + (c.status === 'closed' ? 'Reopen' : 'Publish') + '</button> '
               : '<button class="btn btn-red btn-sm" data-act="close" data-id="' + escapeHtml(c.courseId) + '">Close</button> ') +

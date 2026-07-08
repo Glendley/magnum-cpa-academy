@@ -15,6 +15,13 @@
   var courseId = qsParam('id');
   if (!courseId) { window.location.href = 'app.html#courses'; return; }
 
+  // Admin preview: ?preview=1 opens the course exactly as an employee would
+  // see it (video, lessons, quiz), but nothing is ever saved — no
+  // registration, no progress, no certificate. Only reachable by admins;
+  // adminGetCourseFull rejects anyone else server-side.
+  var isPreview = qsParam('preview') === '1' && user.role === 'admin';
+  var fullQuiz = null;      // preview only: quiz with correctIndex, graded locally
+
   var course = null;        // { meta, tasks, quizMeta, myProgress }
   var completed = [];       // completed task ids
   var currentView = null;   // task index (number) or 'quiz'
@@ -23,16 +30,36 @@
 
   load();
 
+  function backHref() { return isPreview ? 'admin.html#courses' : 'app.html#courses'; }
+
   async function load() {
     try {
-      course = await api('getCourse', { courseId: courseId });
+      if (isPreview) {
+        var full = await api('adminGetCourseFull', { courseId: courseId });
+        fullQuiz = full.quiz || [];
+        course = {
+          meta: full.meta,
+          tasks: full.tasks || [],
+          quizMeta: { questionCount: fullQuiz.length, passThresholdPct: full.meta.passThresholdPct },
+          myProgress: { completedTaskIds: [], quizAttempts: 0, bestScorePct: null, passed: false, certName: 'Preview' }
+        };
+      } else {
+        course = await api('getCourse', { courseId: courseId });
+      }
     } catch (err) {
       shell.innerHTML = '<div style="margin:auto;max-width:460px">' +
         emptyState('&#128683;', 'Course unavailable', err.message) +
-        '<div style="text-align:center;margin-top:16px"><a class="btn btn-ghost" href="app.html#courses">&larr; Back to courses</a></div></div>';
+        '<div style="text-align:center;margin-top:16px"><a class="btn btn-ghost" href="' + backHref() + '">&larr; Back to courses</a></div></div>';
       return;
     }
-    document.title = course.meta.title + ' — Magnum CPA Academy';
+    document.title = (isPreview ? '[Preview] ' : '') + course.meta.title + ' — Magnum CPA Academy';
+
+    if (isPreview) {
+      var banner = document.createElement('div');
+      banner.style.cssText = 'background:#E8A430;color:#1a1a1a;text-align:center;padding:8px 16px;font-weight:700;font-size:0.85rem';
+      banner.textContent = '👁 Preview mode — viewing as an employee would see it. Nothing is saved.';
+      document.body.insertBefore(banner, shell);
+    }
 
     if (!course.myProgress) {
       renderRegistrationGate();
@@ -156,7 +183,7 @@
       '<main class="player-main" id="player-main"></main>';
 
     document.getElementById('player-back').addEventListener('click', function () {
-      window.location.href = 'app.html#courses';
+      window.location.href = backHref();
     });
     shell.querySelectorAll('[data-task]').forEach(function (btn) {
       btn.addEventListener('click', function () {
@@ -245,6 +272,13 @@
 
       var completeBtn = document.getElementById('btn-complete');
       if (completeBtn) completeBtn.addEventListener('click', async function () {
+        if (isPreview) {
+          if (completed.indexOf(t.taskId) === -1) completed.push(t.taskId);
+          course.myProgress.completedTaskIds = completed;
+          currentView = allTasksDone() ? 'quiz' : firstOpenView();
+          renderPlayer();
+          return;
+        }
         setBusy(this, true, 'Saving…');
         try {
           var res = await api('saveProgress', { courseId: courseId, taskId: t.taskId });
@@ -365,7 +399,9 @@
           '  <div class="qr-score">' + (best != null ? best + '%' : 'Passed') + '</div>' +
           '  <p>You have passed this knowledge check' + (attempts ? ' (' + attempts + ' attempt' + (attempts === 1 ? '' : 's') + ')' : '') + '.</p>' +
           '</div>' +
-          '<a class="btn btn-green btn-block btn-lg" href="certificate.html?certId=' + encodeURIComponent(findMyCertLink()) + '" id="btn-view-cert">View my certificate</a>' +
+          (isPreview
+            ? '<p class="muted small mb-8">Preview mode — no certificate is issued and nothing was saved.</p>'
+            : '<a class="btn btn-green btn-block btn-lg" href="certificate.html?certId=' + encodeURIComponent(findMyCertLink()) + '" id="btn-view-cert">View my certificate</a>') +
           '<button class="btn btn-ghost btn-block mt-8" id="btn-start-quiz">Retake for practice</button>'
         : '<h3 class="mb-8">Ready for the Knowledge Check?</h3>' +
           '<p class="muted mb-16">' + course.quizMeta.questionCount + ' questions &middot; you need <b>' +
@@ -395,7 +431,14 @@
     pmain.innerHTML = loadingBlock('Preparing your knowledge check…');
     var quiz;
     try {
-      quiz = await api('getQuiz', { courseId: courseId });
+      if (isPreview) {
+        quiz = {
+          questions: fullQuiz.map(function (q) { return { qId: q.qId, text: q.text, choices: q.choices }; }),
+          passThresholdPct: course.meta.passThresholdPct
+        };
+      } else {
+        quiz = await api('getQuiz', { courseId: courseId });
+      }
     } catch (err) {
       toast(err.message, 'error');
       renderQuizIntro();
@@ -451,8 +494,21 @@
       });
       setBusy(this, true, 'Grading…');
       try {
-        var result = await api('submitQuiz', { courseId: courseId, answers: answers });
-        invalidateCache();
+        var result;
+        if (isPreview) {
+          var perQuestion = answers.map(function (a) {
+            var q = fullQuiz.find(function (fq) { return fq.qId === a.qId; });
+            return { qId: a.qId, correct: !!q && Number(q.correctIndex) === a.choiceIndex };
+          });
+          var correctCount = perQuestion.filter(function (r) { return r.correct; }).length;
+          var scorePct = Math.round((correctCount / fullQuiz.length) * 100);
+          var threshold = course.meta.passThresholdPct || 85;
+          result = { scorePct: scorePct, passed: scorePct >= threshold, certificateId: null,
+                     perQuestion: perQuestion, attempts: (course.myProgress.quizAttempts || 0) + 1, passThresholdPct: threshold };
+        } else {
+          result = await api('submitQuiz', { courseId: courseId, answers: answers });
+          invalidateCache();
+        }
         course.myProgress.quizAttempts = result.attempts;
         course.myProgress.bestScorePct = Math.max(course.myProgress.bestScorePct || 0, result.scorePct);
         if (result.passed) {
@@ -478,11 +534,16 @@
         '<div class="quiz-result-banner pass mt-24" style="max-width:640px">' +
         '  <div class="qr-icon">&#127881;</div>' +
         '  <div class="qr-score">' + result.scorePct + '%</div>' +
-        '  <p>Congratulations — you passed the knowledge check!<br>Your certificate is ready.</p>' +
+        '  <p>' + (isPreview
+          ? 'This would pass — scored above the ' + result.passThresholdPct + '% threshold.'
+          : 'Congratulations — you passed the knowledge check!<br>Your certificate is ready.') + '</p>' +
         '</div>' +
         '<div style="max-width:640px">' +
-        '  <a class="btn btn-green btn-lg btn-block" href="certificate.html?certId=' + encodeURIComponent(result.certificateId || '') + '">&#127942; View, print or download my certificate</a>' +
-        '  <a class="btn btn-ghost btn-block mt-8" href="app.html#courses">Back to courses</a>' +
+        (isPreview
+          ? '<p class="muted small mb-8">Preview mode — no certificate is issued and nothing was saved.</p>' +
+            '<a class="btn btn-ghost btn-block" href="' + backHref() + '">Back to Courses</a>'
+          : '<a class="btn btn-green btn-lg btn-block" href="certificate.html?certId=' + encodeURIComponent(result.certificateId || '') + '">&#127942; View, print or download my certificate</a>' +
+            '<a class="btn btn-ghost btn-block mt-8" href="' + backHref() + '">Back to courses</a>') +
         '</div>';
       renderSidebarOnly();
       return;
@@ -507,7 +568,7 @@
       '</div>' +
       '<div style="max-width:640px" class="mt-16">' +
       '  <button class="btn btn-lg btn-block" id="btn-retake">Retake Knowledge Check</button>' +
-      '  <a class="btn btn-ghost btn-block mt-8" href="app.html#courses">Back to courses</a>' +
+      '  <a class="btn btn-ghost btn-block mt-8" href="' + backHref() + '">Back to courses</a>' +
       '</div>';
 
     document.getElementById('btn-retake').addEventListener('click', startQuiz);
