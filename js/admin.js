@@ -508,7 +508,7 @@
       '  <button class="btn" id="btn-new-emp">+ Add employee</button>' +
       '</div>' +
       '<div class="table-wrap"><table class="table"><thead><tr>' +
-      '<th>Name</th><th>Email</th><th>Role</th><th>Status</th><th style="width:250px">Actions</th>' +
+      '<th>Name</th><th>Email</th><th>Role</th><th>Status</th><th style="width:320px">Actions</th>' +
       '</tr></thead><tbody>' +
       users.map(function (u) {
         return '<tr>' +
@@ -518,7 +518,8 @@
           '<td>' + (u.active ? '<span class="badge badge-green">Active</span>' : '<span class="badge badge-red">Inactive</span>') + '</td>' +
           '<td>' +
           '  <button class="btn btn-ghost btn-sm" data-eedit="' + escapeHtml(u.userId) + '">Edit</button> ' +
-          '  <button class="btn btn-ghost btn-sm" data-ereset="' + escapeHtml(u.userId) + '">Reset password</button>' +
+          '  <button class="btn btn-ghost btn-sm" data-ereset="' + escapeHtml(u.userId) + '">Reset password</button> ' +
+          '  <button class="btn btn-ghost btn-sm" data-eping="' + escapeHtml(u.userId) + '" title="Email their login details">Ping</button>' +
           '</td></tr>';
       }).join('') +
       '</tbody></table></div>';
@@ -528,6 +529,11 @@
     main.querySelectorAll('[data-eedit]').forEach(function (btn) {
       btn.addEventListener('click', function () {
         openEmployeeEditor(users.find(function (u) { return u.userId === btn.dataset.eedit; }));
+      });
+    });
+    main.querySelectorAll('[data-eping]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        openNotifyEmployeeModal(users.find(function (u) { return u.userId === btn.dataset.eping; }), '');
       });
     });
     main.querySelectorAll('[data-ereset]').forEach(function (btn) {
@@ -544,11 +550,13 @@
         );
         overlay.querySelector('[data-close]').addEventListener('click', function () { overlay.remove(); });
         overlay.querySelector('#rp-save').addEventListener('click', async function () {
+          var newPw = overlay.querySelector('#rp-pw').value;
           setBusy(this, true, 'Resetting…');
           try {
-            await api('adminResetPassword', { userId: u.userId, newPassword: overlay.querySelector('#rp-pw').value });
+            await api('adminResetPassword', { userId: u.userId, newPassword: newPw });
             overlay.remove();
-            toast('Password reset. Share the temporary password with ' + u.name + '.', 'success');
+            toast('Password reset.', 'success');
+            openNotifyEmployeeModal(u, newPw);
           } catch (err) { toast(err.message, 'error'); setBusy(this, false); }
         });
       });
@@ -591,10 +599,49 @@
           invalidateCache();
           overlay.remove();
           toast(u ? 'Employee updated.' : 'Employee account created.', 'success');
+          if (!u) {
+            openNotifyEmployeeModal({ name: payload.name, email: payload.email }, payload.password);
+          }
           renderEmployees();
         } catch (err) { toast(err.message, 'error'); setBusy(this, false); }
       });
     }
+  }
+
+  /**
+   * Opens your mail app with the employee's login link, email, and
+   * temporary password pre-filled. Passwords are never stored in plain
+   * text, so this only works right after you set one (creation or reset) —
+   * or by pasting it in again if you still have it.
+   */
+  function openNotifyEmployeeModal(user, defaultPassword) {
+    var overlay = openModal(
+      '<h3>&#128231; Notify ' + escapeHtml(user.name) + '?</h3>' +
+      '<p class="modal-sub">Opens your mail app with their login link, email, and temporary password pre-filled. You press Send.</p>' +
+      '<div class="field"><label>Temporary password to include</label>' +
+      '<input class="input" id="ne-pw" type="text" value="' + escapeHtml(defaultPassword || '') + '" placeholder="Paste the temporary password"></div>' +
+      '<div class="modal-actions">' +
+      '  <button class="btn btn-ghost" data-close>Skip</button>' +
+      '  <button class="btn" id="ne-send">Open email</button>' +
+      '</div>'
+    );
+    overlay.querySelector('[data-close]').addEventListener('click', function () { overlay.remove(); });
+    overlay.querySelector('#ne-send').addEventListener('click', function () {
+      var pw = overlay.querySelector('#ne-pw').value.trim();
+      if (!pw) { toast('Enter the temporary password to include it in the email.', 'error'); return; }
+      openMailto({
+        to: user.email,
+        subject: 'Your Magnum CPA Academy account',
+        body: 'Hi ' + user.name + ',\n\n' +
+              'An account has been created for you on Magnum CPA Academy.\n\n' +
+              'Login page: ' + siteUrl('index.html') + '\n' +
+              'Email: ' + user.email + '\n' +
+              'Temporary password: ' + pw + '\n\n' +
+              'You will be asked to set your own password the first time you sign in.\n\n' +
+              'Thank you!'
+      });
+      overlay.remove();
+    });
   }
 
   /* ════════════════════════════════════════════
