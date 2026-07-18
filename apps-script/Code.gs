@@ -158,7 +158,8 @@ var ROUTES = {
   adminResetPassword:   { role: 'admin', mutates: true,  fn: apiAdminResetPassword },
   adminSaveLinks:       { role: 'admin', mutates: true,  fn: apiAdminSaveLinks },
   adminGetSettings:     { role: 'admin', mutates: false, fn: apiAdminGetSettings },
-  adminSaveSettings:    { role: 'admin', mutates: true,  fn: apiAdminSaveSettings }
+  adminSaveSettings:    { role: 'admin', mutates: true,  fn: apiAdminSaveSettings },
+  adminSendEmail:       { role: 'admin', mutates: false, fn: apiAdminSendEmail }
 };
 
 /* ============================================================
@@ -804,6 +805,28 @@ function apiAdminSaveSettings(p) {
     }
   });
   return apiAdminGetSettings();
+}
+
+/**
+ * Sends an email as the Google account that owns this script (i.e. the
+ * admin's own Gmail/Workspace address) via GmailApp — no SMTP credentials
+ * needed. Subject to Gmail's daily send quota (100/day on a plain Gmail
+ * account, 1,500/day on Google Workspace).
+ */
+function apiAdminSendEmail(p) {
+  var to = String(p.to || '').trim();
+  if (!to) throw new Error('Enter at least one recipient.');
+  var subject = String(p.subject || '');
+  var body = String(p.body || '');
+  var options = {};
+  var cc = String(p.cc || '').trim();
+  if (cc) options.cc = cc;
+  try {
+    GmailApp.sendEmail(to, subject, body, options);
+  } catch (err) {
+    throw new Error('Could not send email: ' + err.message);
+  }
+  return {};
 }
 
 /* ============================================================

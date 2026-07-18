@@ -76,32 +76,70 @@
   async function notifyPrompt(kind, title, summary, page) {
     var settings;
     try { settings = await getSettings(); } catch (e) { settings = {}; }
+    if (!settings.teamEmail) {
+      toast('No team email is configured yet — set it under Settings, or add a recipient below.', 'error');
+    }
+    openSendEmailModal({
+      heading: '&#128227; Notify the team',
+      to: settings.teamEmail || '',
+      cc: settings.ccList || '',
+      subject: '[Magnum CPA Academy] New ' + kind + ': ' + title,
+      body: 'Hi team,\n\nA new ' + kind + ' is now available on Magnum CPA Academy:\n\n' +
+            title + (summary ? '\n' + summary : '') +
+            '\n\nOpen it here: ' + siteUrl(page) +
+            '\n\nThank you!'
+    });
+  }
+
+  /**
+   * Sends email as your own Gmail/Workspace account via the backend
+   * (Google Apps Script's GmailApp — no SMTP setup needed). Shows a
+   * review step first so you can edit anything before it actually goes
+   * out, and always offers a mailto fallback (e.g. if you'd rather send
+   * it yourself, or Gmail's daily sending quota is hit).
+   */
+  function openSendEmailModal(opts) {
     var overlay = openModal(
-      '<h3>&#128227; Notify the team?</h3>' +
-      '<p class="modal-sub">This opens your mail app with a pre-filled email' +
-      (settings.teamEmail ? ' to <b>' + escapeHtml(settings.teamEmail) + '</b>' : '') +
-      (settings.ccList ? ' (CC: ' + escapeHtml(settings.ccList) + ')' : '') +
-      '. You press Send.</p>' +
-      (!settings.teamEmail
-        ? '<p class="modal-sub" style="color:#f0968c">No team email is configured yet — set it under Settings first, or type recipients in your mail app.</p>'
-        : '') +
+      '<h3>' + (opts.heading || 'Send email') + '</h3>' +
+      '<p class="modal-sub">Review before sending — sends from your own Google account.</p>' +
+      '<div class="field"><label>To</label><input class="input" id="se-to" value="' + escapeHtml(opts.to || '') + '" placeholder="name@example.com"></div>' +
+      '<div class="field"><label>Cc (optional)</label><input class="input" id="se-cc" value="' + escapeHtml(opts.cc || '') + '"></div>' +
+      '<div class="field"><label>Subject</label><input class="input" id="se-subject" value="' + escapeHtml(opts.subject || '') + '"></div>' +
+      '<div class="field" style="margin-bottom:0"><label>Message</label><textarea class="textarea" id="se-body" rows="9">' + escapeHtml(opts.body || '') + '</textarea></div>' +
       '<div class="modal-actions">' +
-      '  <button class="btn btn-ghost" data-close>Later</button>' +
-      '  <button class="btn" id="notify-go">Open email</button>' +
-      '</div>'
+      '  <button class="btn btn-ghost" data-close>Cancel</button>' +
+      '  <button class="btn btn-ghost" id="se-mailto">Open in mail app instead</button>' +
+      '  <button class="btn" id="se-send">Send email</button>' +
+      '</div>',
+      { wide: true, sticky: true }
     );
     overlay.querySelector('[data-close]').addEventListener('click', function () { overlay.remove(); });
-    overlay.querySelector('#notify-go').addEventListener('click', function () {
+    overlay.querySelector('#se-mailto').addEventListener('click', function () {
       openMailto({
-        to: settings.teamEmail || '',
-        cc: settings.ccList || '',
-        subject: '[Magnum CPA Academy] New ' + kind + ': ' + title,
-        body: 'Hi team,\n\nA new ' + kind + ' is now available on Magnum CPA Academy:\n\n' +
-              title + (summary ? '\n' + summary : '') +
-              '\n\nOpen it here: ' + siteUrl(page) +
-              '\n\nThank you!'
+        to: overlay.querySelector('#se-to').value,
+        cc: overlay.querySelector('#se-cc').value,
+        subject: overlay.querySelector('#se-subject').value,
+        body: overlay.querySelector('#se-body').value
       });
       overlay.remove();
+    });
+    overlay.querySelector('#se-send').addEventListener('click', async function () {
+      var to = overlay.querySelector('#se-to').value.trim();
+      if (!to) { toast('Enter at least one recipient.', 'error'); return; }
+      setBusy(this, true, 'Sending…');
+      try {
+        await api('adminSendEmail', {
+          to: to,
+          cc: overlay.querySelector('#se-cc').value.trim(),
+          subject: overlay.querySelector('#se-subject').value,
+          body: overlay.querySelector('#se-body').value
+        });
+        toast('Email sent!', 'success');
+        overlay.remove();
+      } catch (err) {
+        toast(err.message, 'error');
+        setBusy(this, false);
+      }
     });
   }
 
@@ -429,8 +467,9 @@
         return !(cell && cell.passed);
       });
       if (!notDone.length) { toast('Everyone has completed this course. 🎉', 'success'); return; }
-      openMailto({
-        to: notDone.map(function (e) { return e.email; }),
+      openSendEmailModal({
+        heading: '&#128276; Ping everyone not done',
+        to: notDone.map(function (e) { return e.email; }).join(', '),
         subject: '[Magnum CPA Academy] Reminder: please complete "' + course.title + '"',
         body: 'Hi,\n\nFriendly reminder to complete the course "' + course.title +
               '" on Magnum CPA Academy, including its knowledge check.\n\n' +
@@ -474,7 +513,8 @@
 
       document.querySelectorAll('[data-ping]').forEach(function (btn) {
         btn.addEventListener('click', function () {
-          openMailto({
+          openSendEmailModal({
+            heading: '&#128276; Ping this employee',
             to: btn.dataset.ping,
             subject: '[Magnum CPA Academy] Reminder: please complete "' + course.title + '"',
             body: 'Hi,\n\nFriendly reminder to complete the course "' + course.title +
@@ -609,27 +649,35 @@
   }
 
   /**
-   * Opens your mail app with the employee's login link, email, and
-   * temporary password pre-filled. Passwords are never stored in plain
-   * text, so this only works right after you set one (creation or reset) —
-   * or by pasting it in again if you still have it.
+   * Notifies an employee of their login details by email. Passwords are
+   * never stored in plain text, so if one isn't already known (the
+   * standalone Ping button) this asks for it first, then opens the
+   * regular send/review modal with it filled in.
    */
   function openNotifyEmployeeModal(user, defaultPassword) {
+    if (defaultPassword) { showCompose(defaultPassword); return; }
+
     var overlay = openModal(
-      '<h3>&#128231; Notify ' + escapeHtml(user.name) + '?</h3>' +
-      '<p class="modal-sub">Opens your mail app with their login link, email, and temporary password pre-filled. You press Send.</p>' +
-      '<div class="field"><label>Temporary password to include</label>' +
-      '<input class="input" id="ne-pw" type="text" value="' + escapeHtml(defaultPassword || '') + '" placeholder="Paste the temporary password"></div>' +
+      '<h3>Notify ' + escapeHtml(user.name) + '</h3>' +
+      '<p class="modal-sub">Enter the temporary password to include, then review the email before sending.</p>' +
+      '<div class="field"><label>Temporary password</label>' +
+      '<input class="input" id="ne-pw" type="text" placeholder="Paste the temporary password"></div>' +
       '<div class="modal-actions">' +
-      '  <button class="btn btn-ghost" data-close>Skip</button>' +
-      '  <button class="btn" id="ne-send">Open email</button>' +
+      '  <button class="btn btn-ghost" data-close>Cancel</button>' +
+      '  <button class="btn" id="ne-next">Continue</button>' +
       '</div>'
     );
     overlay.querySelector('[data-close]').addEventListener('click', function () { overlay.remove(); });
-    overlay.querySelector('#ne-send').addEventListener('click', function () {
+    overlay.querySelector('#ne-next').addEventListener('click', function () {
       var pw = overlay.querySelector('#ne-pw').value.trim();
       if (!pw) { toast('Enter the temporary password to include it in the email.', 'error'); return; }
-      openMailto({
+      overlay.remove();
+      showCompose(pw);
+    });
+
+    function showCompose(pw) {
+      openSendEmailModal({
+        heading: '&#128231; Notify ' + escapeHtml(user.name),
         to: user.email,
         subject: 'Your Magnum CPA Academy account',
         body: 'Hi ' + user.name + ',\n\n' +
@@ -640,8 +688,7 @@
               'You will be asked to set your own password the first time you sign in.\n\n' +
               'Thank you!'
       });
-      overlay.remove();
-    });
+    }
   }
 
   /* ════════════════════════════════════════════

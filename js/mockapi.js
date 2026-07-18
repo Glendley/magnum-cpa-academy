@@ -529,6 +529,14 @@ var MockApi = (function () {
         if (key in p) db.settings[key] = String(p[key]);
       });
       return JSON.parse(JSON.stringify(db.settings));
+    },
+
+    // Demo mode never sends real email — just simulates a successful send.
+    adminSendEmail: function (db, token, p) {
+      requireSession(db, token, 'admin');
+      if (!String(p.to || '').trim()) throw new Error('Enter at least one recipient.');
+      console.info('[demo] Would send email', { to: p.to, cc: p.cc, subject: p.subject, body: p.body });
+      return {};
     }
   };
 

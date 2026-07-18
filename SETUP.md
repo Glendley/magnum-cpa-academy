@@ -4,7 +4,7 @@ A complete e-learning platform for Magnum CPA:
 
 - **Admin portal** — build & publish courses (video tasks + knowledge check), post updates, track who finished, ping stragglers, manage employees, links and settings.
 - **Employee portal** — Updates feed (home), Courses, Certificates, Links, Organizational Chart, behind a hover-to-expand side navigation.
-- **Hosting**: GitHub Pages (free). **Database**: a Google Sheet, powered by Google Apps Script (free). **Emails**: open your mail app pre-filled (mailto), plus automatic Google-Form completion notifications.
+- **Hosting**: GitHub Pages (free). **Database**: a Google Sheet, powered by Google Apps Script (free). **Emails**: sent directly from your own Gmail/Workspace account (no SMTP setup — see Part A), with a mail-app fallback always available, plus automatic Google-Form completion notifications.
 
 ---
 
@@ -31,6 +31,8 @@ Demo mode is for previewing only — for the real thing, follow Parts A–C (abo
    and click **Run**. Google will ask for permissions — click through
    *Review permissions → your account → Advanced → Go to … (unsafe) → Allow*.
    (It is your own script; “unsafe” is Google's standard wording for personal scripts.)
+   This includes permission to **send email as you** — that's what powers the
+   in-app "Send email" buttons (via Gmail, no password ever entered).
    When it finishes, the spreadsheet has all its tabs and a default admin account.
 5. Click **Deploy → New deployment**. Click the ⚙ gear → **Web app**, then set:
    - Description: `Academy API`
@@ -45,7 +47,9 @@ Demo mode is for previewing only — for the real thing, follow Parts A–C (abo
 > ⚠️ **Editing the backend later?** After changing Code.gs, go to
 > **Deploy → Manage deployments → ✏️ pencil → Version: New version → Deploy**.
 > Do **not** create a *new* deployment — that changes the URL and breaks the site
-> until you update `config.js`.
+> until you update `config.js`. If the update adds a new permission (like the
+> Gmail-sending one above), Google may ask you to re-authorize — same
+> *Review permissions → Advanced → Allow* click-through as the first time.
 
 ## Part B — Put the site on GitHub Pages (~5 min)
 
@@ -149,4 +153,11 @@ appears under **Certificates** permanently.
   rows by hand (especially IDs). Back it up with File → Make a copy.
 - **Loading speed**: Google Apps Script adds ~1–3 s per request — the site shows
   loading indicators; this is normal for the free tier.
-- **Demo mode** (`API_URL: ''`) never touches the Google Sheet.
+- **Demo mode** (`API_URL: ''`) never touches the Google Sheet, and never sends
+  real email — it just logs what would have been sent to the browser console.
+- **Email sending quota**: Gmail sending (via Apps Script's GmailApp) caps at
+  100 emails/day on a plain Gmail account, or 1,500/day on Google Workspace —
+  either is comfortably enough for a small firm's notifications. Every send
+  modal shows a full preview (edit anything before it goes out) and an
+  "Open in mail app instead" fallback if you'd rather send it yourself or the
+  quota is hit.
