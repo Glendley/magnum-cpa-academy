@@ -1,7 +1,7 @@
 /* ============================================================
    Magnum CPA Academy — site configuration
    ------------------------------------------------------------
-   API_URL: https://script.google.com/macros/s/AKfycbwgO_XowjwgAtJPE7SvcOfyi6S0ygJu92dVKJaN8tBx8XXD_JoYuLHRWUfGFDyXqNVW/exec
+   API_URL: https://script.google.com/macros/s/AKfycbzRZyMOiVPjWrwhjh8urBxvHBXkm2MWGHiicSE4XNWWboaMReKml2DZqFhTSIonE5md/exec
 
    While API_URL is empty the site runs in DEMO MODE: everything
    works, but data is stored only in this browser (localStorage)
@@ -10,7 +10,7 @@
    ============================================================ */
 
 var CONFIG = {
-  API_URL: 'https://script.google.com/macros/s/AKfycbwgO_XowjwgAtJPE7SvcOfyi6S0ygJu92dVKJaN8tBx8XXD_JoYuLHRWUfGFDyXqNVW/exec',
+  API_URL: 'https://script.google.com/macros/s/AKfycbzRZyMOiVPjWrwhjh8urBxvHBXkm2MWGHiicSE4XNWWboaMReKml2DZqFhTSIonE5md/exec',
   SITE_NAME: 'Magnum CPA Academy',
   LOGO: 'images/logo-globe.png'
 };
