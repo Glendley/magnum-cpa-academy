@@ -41,9 +41,11 @@ var MockApi = (function () {
       progress: [],
       certificates: [],
       links: [],
+      clientAccessLog: [],  // { name, accessedAt }
       settings: {
         teamEmail: '', ccList: '', completionFormUrl: '',
-        defaultPassThreshold: '85', sessionHours: '12', firmName: 'Magnum CPA Academy'
+        defaultPassThreshold: '85', sessionHours: '12', firmName: 'Magnum CPA Academy',
+        clientAccessCode: ''
       }
     };
   }
@@ -130,6 +132,51 @@ var MockApi = (function () {
       };
     },
 
+    clientLogin: function (db, token, p) {
+      var name = String(p.name || '').trim();
+      if (!name) throw new Error('Please enter your name.');
+      if (name.length > 80) throw new Error('Name is too long (max 80 characters).');
+      var configured = String(db.settings.clientAccessCode || '').trim();
+      if (!configured) throw new Error('Client access is not enabled yet. Please contact Magnum CPA.');
+      var code = String(p.code || '').trim();
+      if (!code || code !== configured) throw new Error('Invalid access code.');
+
+      db.sessions = db.sessions.filter(function (s) { return new Date(s.expiresAt).getTime() >= Date.now(); });
+      var newToken = 'tok-' + uuid() + uuid();
+      var userId = 'client-' + uuid();
+      var hours = Number(db.settings.sessionHours) || 12;
+      db.sessions.push({ token: newToken, userId: userId, role: 'client',
+                         createdAt: nowIso(), expiresAt: new Date(Date.now() + hours * 3600000).toISOString() });
+      db.clientAccessLog.push({ name: name, accessedAt: nowIso() });
+      return { token: newToken, user: { userId: userId, name: name, role: 'client' } };
+    },
+
+    clientGetBootstrap: function (db, token) {
+      requireSession(db, token);
+      return {
+        updates: db.updates
+          .filter(function (u) { return u.status === 'published' && u.showToClients; })
+          .map(function (u) { return { updateId: u.updateId, title: u.title, summary: u.summary, publishedAt: u.publishedAt }; })
+          .sort(function (a, b) { return a.publishedAt < b.publishedAt ? 1 : -1; }),
+        courses: db.courses
+          .filter(function (c) { return c.meta.status === 'open' && c.meta.showToClients; })
+          .map(function (c) { return { courseId: c.meta.courseId, title: c.meta.title, description: c.meta.description,
+                                       taskCount: c.meta.taskCount, publishedAt: c.meta.publishedAt, createdAt: c.meta.createdAt }; })
+          .sort(function (a, b) { return (a.publishedAt || a.createdAt) < (b.publishedAt || b.createdAt) ? 1 : -1; }),
+        settingsLite: { firmName: db.settings.firmName || 'Magnum CPA Academy' }
+      };
+    },
+
+    clientGetCourse: function (db, token, p) {
+      requireSession(db, token);
+      var c = findCourse(db, p.courseId);
+      if (c.meta.status !== 'open' || !c.meta.showToClients) throw new Error('Course not found.');
+      return {
+        meta: { courseId: c.meta.courseId, title: c.meta.title, description: c.meta.description },
+        tasks: c.tasks.map(function (t) { return { taskId: t.taskId, title: t.title, video: t.video, contentHtml: t.contentHtml }; })
+      };
+    },
+
     logout: function (db, token) {
       var sess = requireSession(db, token);
       db.sessions = db.sessions.filter(function (s) { return s.token !== sess.token; });
@@ -159,7 +206,8 @@ var MockApi = (function () {
         user: { userId: user.userId, name: user.name, email: user.email, role: user.role },
         updates: db.updates
           .filter(function (u) { return u.status === 'published'; })
-          .map(function (u) { return { updateId: u.updateId, title: u.title, summary: u.summary, publishedAt: u.publishedAt }; })
+          .map(function (u) { return { updateId: u.updateId, title: u.title, summary: u.summary,
+                                       publishedAt: u.publishedAt, showToClients: !!u.showToClients }; })
           .sort(function (a, b) { return a.publishedAt < b.publishedAt ? 1 : -1; }),
         courses: db.courses
           .filter(function (c) { return isAdmin || c.meta.status === 'open'; })
@@ -178,6 +226,7 @@ var MockApi = (function () {
       var sess = requireSession(db, token);
       var u = db.updates.find(function (x) { return x.updateId === p.updateId; });
       if (!u || (u.status !== 'published' && sess.role !== 'admin')) throw new Error('Update not found.');
+      if (sess.role === 'client' && !u.showToClients) throw new Error('Update not found.');
       return { updateId: u.updateId, title: u.title, summary: u.summary,
                status: u.status, bodyHtml: u.bodyHtml, publishedAt: u.publishedAt };
     },
@@ -348,7 +397,8 @@ var MockApi = (function () {
           courseId: courseId, title: title, description: String(input.description || ''),
           status: status, registrationFormUrl: String(input.registrationFormUrl || ''),
           passThresholdPct: threshold, taskCount: tasks.length, questionCount: quiz.length,
-          createdAt: now, updatedAt: now, publishedAt: status === 'open' ? now : ''
+          createdAt: now, updatedAt: now, publishedAt: status === 'open' ? now : '',
+          showToClients: false
         },
         tasks: tasks, quiz: quiz
       });
@@ -401,7 +451,8 @@ var MockApi = (function () {
       db.updates.push({
         updateId: updateId, title: title, summary: String(p.summary || ''),
         bodyHtml: sanitizeHtml(String(p.bodyHtml || '')), status: status,
-        createdAt: now, publishedAt: status === 'published' ? now : ''
+        createdAt: now, publishedAt: status === 'published' ? now : '',
+        showToClients: false
       });
       return { updateId: updateId };
     },
@@ -537,6 +588,28 @@ var MockApi = (function () {
       if (!String(p.to || '').trim()) throw new Error('Enter at least one recipient.');
       console.info('[demo] Would send email', { to: p.to, cc: p.cc, subject: p.subject, body: p.body });
       return {};
+    },
+
+    adminSetCourseClientVisibility: function (db, token, p) {
+      requireSession(db, token, 'admin');
+      var c = findCourse(db, p.courseId);
+      c.meta.showToClients = !!p.showToClients;
+      return {};
+    },
+
+    adminSetUpdateClientVisibility: function (db, token, p) {
+      requireSession(db, token, 'admin');
+      var u = db.updates.find(function (x) { return x.updateId === p.updateId; });
+      if (!u) throw new Error('Update not found.');
+      u.showToClients = !!p.showToClients;
+      return {};
+    },
+
+    adminGetClientAccessLog: function (db, token) {
+      requireSession(db, token, 'admin');
+      return db.clientAccessLog.slice()
+        .sort(function (a, b) { return a.accessedAt < b.accessedAt ? 1 : -1; })
+        .slice(0, 50);
     }
   };
 

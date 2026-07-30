@@ -212,6 +212,38 @@
 .admin-sidebar .rail-bottom { padding: 12px 0; border-top: 1px solid var(--line); }
 .admin-main { max-width: 1160px; margin: 0 auto; padding: 30px 28px 70px; }
 
+/* ────────────────────────────────────────────
+   CLIENT PORTAL — same simple fixed-labeled sidebar as admin,
+   just narrower (only 2 items: Updates, Courses)
+   ──────────────────────────────────────────── */
+.client-shell { padding-left: 200px; }
+.client-sidebar {
+  position: fixed; top: 0; left: 0; bottom: 0; z-index: 100;
+  width: 200px;
+  background: #081220; border-right: 1px solid var(--line);
+  display: flex; flex-direction: column;
+}
+.client-sidebar .rail-logo {
+  display: flex; align-items: center; gap: 11px;
+  height: 60px; padding: 0 16px; border-bottom: 1px solid var(--line); flex-shrink: 0;
+}
+.client-sidebar .rail-logo img { width: 32px; height: 32px; object-fit: contain; }
+.client-sidebar .rail-logo .rail-title { font-weight: 700; font-size: 0.88rem; }
+.client-sidebar .rail-logo .rail-title span { display: block; color: var(--gold); font-size: 0.58rem; letter-spacing: 2px; text-transform: uppercase; margin-top: -2px; }
+.client-sidebar .rail-items { flex: 1; padding: 12px 0; }
+.client-sidebar .nav-item .nav-label { opacity: 1; }
+.client-sidebar .rail-bottom { padding: 12px 0; border-top: 1px solid var(--line); }
+.client-main { max-width: 900px; margin: 0 auto; padding: 30px 28px 70px; }
+
+@media (max-width: 900px) {
+  .client-shell { padding-left: 0; }
+  .client-sidebar { position: static; width: 100%; height: auto; flex-direction: row; }
+  .client-sidebar .rail-logo { border-bottom: none; }
+  .client-sidebar .rail-items { display: flex; padding: 0; }
+  .client-sidebar .nav-item { white-space: nowrap; border-left: none; border-bottom: 3px solid transparent; }
+  .client-sidebar .nav-item.active { border-bottom-color: var(--gold); }
+}
+
 /* Tracking matrix */
 .tracking-cell { font-size: 0.8rem; white-space: nowrap; }
 .status-chip {

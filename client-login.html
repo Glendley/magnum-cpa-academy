@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Client Login — Magnum CPA Academy</title>
+<link rel="icon" href="images/logo-globe.png">
+<link rel="stylesheet" href="css/theme.css">
+<link rel="stylesheet" href="css/portal.css">
+</head>
+<body class="login-page">
+
+<div class="login-card">
+  <div class="login-logo">
+    <img src="images/logo-globe.png" alt="Magnum CPA">
+    <h1>Magnum CPA</h1>
+    <div class="tagline">Client Portal</div>
+  </div>
+
+  <div class="login-error" id="login-error"></div>
+
+  <form id="client-login-form" autocomplete="off">
+    <div class="field">
+      <label for="client-name">Your name</label>
+      <input class="input" type="text" id="client-name" placeholder="Jane Client" maxlength="80" required>
+    </div>
+    <div class="field">
+      <label for="client-code">Access code</label>
+      <input class="input" type="password" id="client-code" placeholder="Provided by Magnum CPA" required>
+    </div>
+    <button class="btn btn-block btn-lg" type="submit" id="client-login-btn">Enter portal</button>
+  </form>
+
+  <div class="login-footer" id="login-footer">
+    Don't have an access code? Contact Magnum CPA.
+  </div>
+  <div class="login-footer">
+    <a href="index.html">&larr; Employee / admin login</a>
+  </div>
+</div>
+
+<script src="js/config.js"></script>
+<script src="js/mockapi.js"></script>
+<script src="js/util.js"></script>
+<script src="js/api.js"></script>
+<script src="js/auth.js"></script>
+<script>
+(function () {
+  var user = getUserCached();
+  if (getToken() && user && user.role === 'client') {
+    window.location.replace('client.html');
+    return;
+  }
+
+  if (isMockMode()) {
+    document.getElementById('login-footer').innerHTML =
+      'Demo mode — set an access code under Admin &rarr; Settings first.';
+  }
+
+  var form = document.getElementById('client-login-form');
+  var errorBox = document.getElementById('login-error');
+
+  form.addEventListener('submit', async function (e) {
+    e.preventDefault();
+    errorBox.classList.remove('show');
+    var btn = document.getElementById('client-login-btn');
+    setBusy(btn, true, 'Entering…');
+    try {
+      var result = await api('clientLogin', {
+        name: document.getElementById('client-name').value,
+        code: document.getElementById('client-code').value
+      });
+      setToken(result.token);
+      setUserCached(result.user);
+      window.location.href = 'client.html';
+    } catch (err) {
+      errorBox.textContent = err.message;
+      errorBox.classList.add('show');
+      setBusy(btn, false);
+    }
+  });
+})();
+</script>
+</body>
+</html>

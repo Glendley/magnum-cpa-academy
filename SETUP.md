@@ -4,6 +4,7 @@ A complete e-learning platform for Magnum CPA:
 
 - **Admin portal** — build & publish courses (video tasks + knowledge check), post updates, track who finished, ping stragglers, manage employees, links and settings.
 - **Employee portal** — Updates feed (home), Courses, Certificates, Links, Organizational Chart, behind a hover-to-expand side navigation.
+- **Client portal** (optional) — a simplified Updates + Courses view for clients, one shared access code instead of individual accounts, no quiz/progress/certificates. Admin opts each course/update in individually.
 - **Hosting**: GitHub Pages (free). **Database**: a Google Sheet, powered by Google Apps Script (free). **Emails**: sent directly from your own Gmail/Workspace account (no SMTP setup — see Part A), with a mail-app fallback always available, plus automatic Google-Form completion notifications.
 
 ---
@@ -109,6 +110,13 @@ video to **Google Drive** and set sharing to **“Anyone with the link – Viewe
 For Drive videos also enter the video length — it controls when the “Next”
 button unlocks (YouTube and .mp4 videos unlock automatically when they end).
 
+**Preventing downloads:** the app can't block downloading — that control lives
+on Drive itself. On each video file: **Share → ⚙ (gear icon in the share dialog)
+→ uncheck "Viewers and commenters can download, print, and copy."** This
+disables the download button in Drive's own player. There's no equivalent for
+YouTube embeds. (Screenshots and screen recording can't be blocked by any
+website — see "Good to know" below for what the platform does instead.)
+
 1. **Courses → + New course**: title (manual), description, and the
    **registration Google Form URL** (create any registration form you like —
    employees must submit it before starting).
@@ -125,6 +133,34 @@ button unlocks (YouTube and .mp4 videos unlock automatically when they end).
 Employees then: register → enter their certificate name → complete tasks →
 pass the knowledge check (≥85%) → print/download their certificate, which also
 appears under **Certificates** permanently.
+
+## Part F — Client Portal (optional)
+
+A separate, simplified portal for clients — Updates and Courses only, no
+registration, no knowledge check, no progress tracking. One shared access
+code instead of individual accounts.
+
+1. **Admin → Settings → Client portal access**: set an **access code**
+   (anything memorable — it's not a password on an individual account, just a
+   shared key). Leave it empty to keep client login disabled.
+2. Share the code and the link (`client-login.html`, or use the "Client
+   login →" link at the bottom of the main sign-in page) with your clients.
+   Clients enter their name and the code — no account creation needed.
+3. On the **Courses** and **Updates** tabs, each row has a **Client: Off/On**
+   toggle. It's **off by default** — publishing a course or update for
+   employees does *not* automatically expose it to clients. Turn it on only
+   for content that's appropriate for an external audience (client-facing
+   courses should be simple overviews — no internal pricing, staff policy,
+   or tooling references).
+4. The Settings page also shows a **recent client visits** list (name +
+   date) — light visibility into who's used the code, since it's shared and
+   not tied to individual logins.
+
+**Soft security note:** a single shared code is inherently weaker than
+per-user passwords — anyone with the code can view whatever's turned on for
+clients, and the typed name is self-reported, not verified. Treat it like a
+shared door code: rotate it occasionally, and don't post it somewhere public
+(e.g. a public website page) — share it directly with clients instead.
 
 ---
 
@@ -143,6 +179,11 @@ appears under **Certificates** permanently.
 5. Admin: Tracking shows "Completed + score"; your Course Completion form
    (Part D) received a response; **Ping** emails only the unfinished employees.
 6. Close the course → it disappears from the employee's Courses tab.
+7. Client portal (if enabled): set an access code, flip **Client: On** for
+   one course and one update → open `client-login.html` in a private/incognito
+   window → enter any name + the code → confirm only the flagged course/update
+   appear (no quiz, no progress ring, no lock icons) → confirm a
+   **Client: Off** item stays invisible even if you know its ID.
 
 ## Good to know
 
@@ -161,3 +202,15 @@ appears under **Certificates** permanently.
   modal shows a full preview (edit anything before it goes out) and an
   "Open in mail app instead" fallback if you'd rather send it yourself or the
   quota is hit.
+- **Gmail sending on a Google Workspace account**: if "Send email" fails with
+  a permissions error even after re-authorizing, your Workspace admin may need
+  to allow the app first — **admin.google.com → Security → API controls →
+  App access control** → find this script and mark it **Trusted** (or enable
+  "Trust internal, domain-owned apps" to cover this automatically in future).
+  This is a domain-level setting outside the script entirely; re-authorizing
+  or redeploying the script yourself won't fix it. Until then, "Open in mail
+  app instead" still works.
+- **Screenshots / screen recording**: no website can block these — screen
+  capture happens at the OS level. Course pages show a faint watermark
+  (viewer's name + timestamp) instead, so a leaked screenshot is traceable
+  to who took it. That's a deterrent, not a technical block.

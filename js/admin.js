@@ -169,7 +169,7 @@
       html += emptyState('&#127891;', 'No courses yet', 'Click “New course” for how to add your first training course.');
     } else {
       html += '<div class="table-wrap"><table class="table"><thead><tr>' +
-        '<th>Course</th><th>Status</th><th>Tasks</th><th>Questions</th><th>Registration form</th><th style="width:410px">Actions</th>' +
+        '<th>Course</th><th>Status</th><th>Tasks</th><th>Questions</th><th>Registration form</th><th style="width:490px">Actions</th>' +
         '</tr></thead><tbody>' +
         courses.map(function (c) {
           return '<tr>' +
@@ -185,6 +185,7 @@
               ? '<button class="btn btn-green btn-sm" data-act="publish" data-id="' + escapeHtml(c.courseId) + '">' + (c.status === 'closed' ? 'Reopen' : 'Publish') + '</button> '
               : '<button class="btn btn-red btn-sm" data-act="close" data-id="' + escapeHtml(c.courseId) + '">Close</button> ') +
             '  <button class="btn btn-ghost btn-sm" data-act="notify" data-id="' + escapeHtml(c.courseId) + '">Notify</button> ' +
+            '  <button class="btn btn-ghost btn-sm" data-act="toggleclient" data-id="' + escapeHtml(c.courseId) + '" data-current="' + (c.showToClients ? '1' : '0') + '" title="Whether this course appears in the client portal">Client: ' + (c.showToClients ? '<b style="color:var(--green-2)">On</b>' : 'Off') + '</button> ' +
             '  <button class="icon-btn danger" title="Delete course" data-act="delete" data-id="' + escapeHtml(c.courseId) + '">&#128465;</button>' +
             '</td></tr>';
         }).join('') +
@@ -203,6 +204,18 @@
         if (act === 'edit') { openCourseDetail(course); return; }
 
         if (act === 'notify') { notifyPrompt('course', course.title, course.description, 'app.html#courses'); return; }
+
+        if (act === 'toggleclient') {
+          var newVis = btn.dataset.current !== '1';
+          setBusy(btn, true, '…');
+          try {
+            await api('adminSetCourseClientVisibility', { courseId: id, showToClients: newVis });
+            invalidateCache();
+            toast(newVis ? 'Course is now visible in the client portal.' : 'Course hidden from the client portal.', 'success');
+            renderCourseList();
+          } catch (err) { toast(err.message, 'error'); setBusy(btn, false); }
+          return;
+        }
 
         if (act === 'publish') {
           setBusy(btn, true, '…');
@@ -329,7 +342,7 @@
       html += emptyState('&#128227;', 'No published updates', 'Click “New update” to post your first announcement.');
     } else {
       html += '<div class="table-wrap"><table class="table"><thead><tr>' +
-        '<th>Update</th><th>Published</th><th style="width:300px">Actions</th></tr></thead><tbody>' +
+        '<th>Update</th><th>Published</th><th style="width:380px">Actions</th></tr></thead><tbody>' +
         updates.map(function (u) {
           return '<tr>' +
             '<td><b>' + escapeHtml(u.title) + '</b><br><span class="muted small">' + escapeHtml((u.summary || '').slice(0, 90)) + '</span></td>' +
@@ -337,6 +350,7 @@
             '<td>' +
             '  <button class="btn btn-ghost btn-sm" data-uedit="' + escapeHtml(u.updateId) + '">Edit</button> ' +
             '  <button class="btn btn-ghost btn-sm" data-unotify="' + escapeHtml(u.updateId) + '">Notify</button> ' +
+            '  <button class="btn btn-ghost btn-sm" data-uclient="' + escapeHtml(u.updateId) + '" data-current="' + (u.showToClients ? '1' : '0') + '" title="Whether this update appears in the client portal">Client: ' + (u.showToClients ? '<b style="color:var(--green-2)">On</b>' : 'Off') + '</button> ' +
             '  <button class="icon-btn danger" title="Delete" data-udel="' + escapeHtml(u.updateId) + '">&#128465;</button>' +
             '</td></tr>';
         }).join('') +
@@ -359,6 +373,18 @@
       btn.addEventListener('click', function () {
         var u = updates.find(function (x) { return x.updateId === btn.dataset.unotify; });
         notifyPrompt('update', u.title, u.summary, 'app.html#update/' + u.updateId);
+      });
+    });
+    main.querySelectorAll('[data-uclient]').forEach(function (btn) {
+      btn.addEventListener('click', async function () {
+        var newVis = btn.dataset.current !== '1';
+        setBusy(btn, true, '…');
+        try {
+          await api('adminSetUpdateClientVisibility', { updateId: btn.dataset.uclient, showToClients: newVis });
+          invalidateCache();
+          toast(newVis ? 'Update is now visible in the client portal.' : 'Update hidden from the client portal.', 'success');
+          renderUpdates();
+        } catch (err) { toast(err.message, 'error'); setBusy(btn, false); }
       });
     });
     main.querySelectorAll('[data-udel]').forEach(function (btn) {
@@ -788,9 +814,10 @@
 
   async function renderSettings() {
     main.innerHTML = loadingBlock('Loading settings…');
-    var s;
+    var s, clientLog;
     try {
       s = await getSettings(true);
+      clientLog = await api('adminGetClientAccessLog');
     } catch (err) {
       main.innerHTML = emptyState('&#9888;&#65039;', 'Could not load settings', err.message);
       return;
@@ -821,6 +848,23 @@
       '</div>' +
 
       '<div class="card mb-16">' +
+      '  <h3 class="mb-8">&#128274; Client portal access</h3>' +
+      '  <p class="small muted mb-16">One shared access code — no individual client accounts. Anyone with the code and the ' +
+      '<a href="client-login.html" target="_blank" rel="noopener">client login link</a> can view courses and updates you\'ve marked ' +
+      '"Client: On". Treat it like a shared door code — rotate it periodically and don\'t post it publicly.</p>' +
+      '  <div class="field" style="margin-bottom:0"><label>Access code</label>' +
+      '    <input class="input" id="st-clientcode" type="text" placeholder="Leave empty to disable client login" value="' + escapeHtml(s.clientAccessCode || '') + '"></div>' +
+      (clientLog && clientLog.length
+        ? '  <div class="hint mb-8" style="margin-top:14px">Recent client visits</div>' +
+          '  <div class="table-wrap"><table class="table"><thead><tr><th>Name</th><th>When</th></tr></thead><tbody>' +
+          clientLog.map(function (v) {
+            return '<tr><td>' + escapeHtml(v.name) + '</td><td class="small muted">' + fmtDateShort(v.accessedAt) + '</td></tr>';
+          }).join('') +
+          '  </tbody></table></div>'
+        : '  <div class="hint" style="margin-top:10px">No client visits yet.</div>') +
+      '</div>' +
+
+      '<div class="card mb-16">' +
       '  <h3 class="mb-16">&#9881;&#65039; Platform defaults</h3>' +
       '  <div class="row" style="flex-wrap:wrap;align-items:flex-start">' +
       '  <div class="field grow" style="min-width:220px"><label>Firm name</label>' +
@@ -843,6 +887,7 @@
           teamEmail: document.getElementById('st-team').value.trim(),
           ccList: document.getElementById('st-cc').value.trim(),
           completionFormUrl: document.getElementById('st-form').value.trim(),
+          clientAccessCode: document.getElementById('st-clientcode').value.trim(),
           firmName: document.getElementById('st-firm').value.trim(),
           defaultPassThreshold: document.getElementById('st-threshold').value,
           sessionHours: document.getElementById('st-session').value

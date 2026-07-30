@@ -29,14 +29,15 @@ var DEFAULT_ADMIN = { name: 'Glenn Matias', email: 'glenn@magnumcpa.com', passwo
 var SCHEMA = {
   Users:        ['userId', 'name', 'email', 'passwordHash', 'salt', 'role', 'active', 'mustChangePassword', 'createdAt'],
   Sessions:     ['token', 'userId', 'role', 'createdAt', 'expiresAt'],
-  Courses:      ['courseId', 'title', 'description', 'status', 'registrationFormUrl', 'passThresholdPct', 'taskCount', 'questionCount', 'createdAt', 'updatedAt', 'publishedAt'],
+  Courses:      ['courseId', 'title', 'description', 'status', 'registrationFormUrl', 'passThresholdPct', 'taskCount', 'questionCount', 'createdAt', 'updatedAt', 'publishedAt', 'showToClients'],
   CourseData:   ['courseId', 'chunkIndex', 'chunk'],
-  Updates:      ['updateId', 'title', 'summary', 'status', 'createdAt', 'publishedAt'],
+  Updates:      ['updateId', 'title', 'summary', 'status', 'createdAt', 'publishedAt', 'showToClients'],
   UpdateData:   ['updateId', 'chunkIndex', 'chunk'],
   Progress:     ['progressId', 'userId', 'courseId', 'certName', 'registeredAt', 'completedTaskIds', 'quizAttempts', 'bestScorePct', 'passed', 'passedAt', 'updatedAt'],
   Certificates: ['certId', 'userId', 'certName', 'courseId', 'courseTitle', 'scorePct', 'taskCount', 'issuedAt'],
   Links:        ['linkId', 'label', 'url', 'description', 'sortOrder'],
-  Settings:     ['key', 'value']
+  Settings:     ['key', 'value'],
+  ClientAccessLog: ['name', 'accessedAt']
 };
 
 var DEFAULT_SETTINGS = {
@@ -45,7 +46,8 @@ var DEFAULT_SETTINGS = {
   completionFormUrl: '',
   defaultPassThreshold: '85',
   sessionHours: '12',
-  firmName: 'Magnum CPA Academy'
+  firmName: 'Magnum CPA Academy',
+  clientAccessCode: ''
 };
 
 var CHUNK_SIZE = 45000;          // stay under the 50,000-char/cell Sheets limit
@@ -59,12 +61,22 @@ function setup() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   Object.keys(SCHEMA).forEach(function (name) {
     var sheet = ss.getSheetByName(name);
-    if (!sheet) sheet = ss.insertSheet(name);
     var headers = SCHEMA[name];
-    var firstRow = sheet.getRange(1, 1, 1, headers.length).getValues()[0];
-    if (String(firstRow[0]) !== headers[0]) {
+    if (!sheet) {
+      sheet = ss.insertSheet(name);
       sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
       sheet.setFrozenRows(1);
+      return;
+    }
+    var firstCell = sheet.getRange(1, 1).getValue();
+    if (String(firstCell) !== headers[0]) {
+      sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+      sheet.setFrozenRows(1);
+    } else if (sheet.getLastColumn() < headers.length) {
+      // Schema grew new trailing columns since this sheet was created —
+      // extend the header row only; existing data rows are untouched and
+      // simply read back as '' (falsy) for the new columns.
+      sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
     }
   });
 
@@ -133,7 +145,10 @@ function doPost(e) {
 var ROUTES = {
   // public
   login:                { pub: true, mutates: true,  fn: apiLogin },
+  clientLogin:          { pub: true, mutates: true,  fn: apiClientLogin },
   // any authenticated user
+  clientGetBootstrap:   { role: 'any', mutates: false, fn: apiClientGetBootstrap },
+  clientGetCourse:      { role: 'any', mutates: false, fn: apiClientGetCourse },
   logout:               { role: 'any', mutates: true,  fn: apiLogout },
   changePassword:       { role: 'any', mutates: true,  fn: apiChangePassword },
   getBootstrap:         { role: 'any', mutates: false, fn: apiGetBootstrap },
@@ -159,7 +174,10 @@ var ROUTES = {
   adminSaveLinks:       { role: 'admin', mutates: true,  fn: apiAdminSaveLinks },
   adminGetSettings:     { role: 'admin', mutates: false, fn: apiAdminGetSettings },
   adminSaveSettings:    { role: 'admin', mutates: true,  fn: apiAdminSaveSettings },
-  adminSendEmail:       { role: 'admin', mutates: false, fn: apiAdminSendEmail }
+  adminSendEmail:       { role: 'admin', mutates: false, fn: apiAdminSendEmail },
+  adminGetClientAccessLog:        { role: 'admin', mutates: false, fn: apiAdminGetClientAccessLog },
+  adminSetCourseClientVisibility: { role: 'admin', mutates: true,  fn: apiAdminSetCourseClientVisibility },
+  adminSetUpdateClientVisibility: { role: 'admin', mutates: true,  fn: apiAdminSetUpdateClientVisibility }
 };
 
 /* ============================================================
@@ -205,6 +223,38 @@ function apiLogin(p) {
     user: { userId: user.userId, name: user.name, email: user.email, role: user.role },
     mustChangePassword: isTrue(user.mustChangePassword)
   };
+}
+
+/**
+ * Client portal login: one shared access code (Settings.clientAccessCode),
+ * no individual accounts. Each successful login gets its own synthetic
+ * userId and a Sessions row with role 'client' — no Users-sheet row
+ * needed, since requireSession() only special-cases role 'admin' and
+ * treats everything else as "any authenticated session". The typed name
+ * is logged (ClientAccessLog) for light visibility into who's viewing,
+ * not verified against anything.
+ */
+function apiClientLogin(p) {
+  var name = String(p.name || '').trim();
+  if (!name) throw new Error('Please enter your name.');
+  if (name.length > 80) throw new Error('Name is too long (max 80 characters).');
+
+  var configured = String(getSetting('clientAccessCode') || '').trim();
+  if (!configured) throw new Error('Client access is not enabled yet. Please contact Magnum CPA.');
+
+  var code = String(p.code || '').trim();
+  if (!code || code !== configured) throw new Error('Invalid access code.');
+
+  purgeExpiredSessions();
+  var hours = Number(getSetting('sessionHours')) || 12;
+  var token = 'tok-' + Utilities.getUuid() + Utilities.getUuid();
+  var userId = 'client-' + Utilities.getUuid();
+  var expires = new Date(Date.now() + hours * 3600 * 1000).toISOString();
+  appendRow('Sessions', { token: token, userId: userId, role: 'client', createdAt: nowIso(), expiresAt: expires });
+  cacheSession(token, { userId: userId, role: 'client', expiresAt: expires });
+  appendRow('ClientAccessLog', { name: name, accessedAt: nowIso() });
+
+  return { token: token, user: { userId: userId, name: name, role: 'client' } };
 }
 
 function apiLogout(p, session) {
@@ -270,7 +320,8 @@ function apiGetBootstrap(p, session) {
 
   var updates = readRows('Updates')
     .filter(function (u) { return u.status === 'published'; })
-    .map(function (u) { return { updateId: u.updateId, title: u.title, summary: u.summary, publishedAt: iso(u.publishedAt) }; })
+    .map(function (u) { return { updateId: u.updateId, title: u.title, summary: u.summary,
+                                 publishedAt: iso(u.publishedAt), showToClients: isTrue(u.showToClients) }; })
     .sort(function (a, b) { return b.publishedAt < a.publishedAt ? -1 : 1; });
 
   var isAdmin = session.role === 'admin';
@@ -281,6 +332,7 @@ function apiGetBootstrap(p, session) {
         courseId: c.courseId, title: c.title, description: c.description, status: c.status,
         registrationFormUrl: c.registrationFormUrl, taskCount: Number(c.taskCount) || 0,
         questionCount: Number(c.questionCount) || 0, passThresholdPct: Number(c.passThresholdPct) || 85,
+        showToClients: isTrue(c.showToClients),
         publishedAt: iso(c.publishedAt), createdAt: iso(c.createdAt), updatedAt: iso(c.updatedAt)
       };
     })
@@ -314,6 +366,10 @@ function apiGetUpdate(p, session) {
   var u = readRows('Updates').filter(function (r) { return r.updateId === p.updateId; })[0];
   if (!u) throw new Error('Update not found.');
   if (u.status !== 'published' && session.role !== 'admin') throw new Error('Update not found.');
+  // Clients only ever see updates admin explicitly opted in — closes the
+  // gap where a client could otherwise paste a guessed updateId and read
+  // employee-only content directly.
+  if (session.role === 'client' && !isTrue(u.showToClients)) throw new Error('Update not found.');
   return { updateId: u.updateId, title: u.title, summary: u.summary, status: u.status,
            bodyHtml: readChunks('UpdateData', 'updateId', u.updateId), publishedAt: iso(u.publishedAt) };
 }
@@ -337,6 +393,41 @@ function apiGetCourse(p, session) {
     quizMeta: { questionCount: (course.quiz || []).length, passThresholdPct: Number(meta.passThresholdPct) || 85 },
     myProgress: prog ? progressToClient(prog) : null
   };
+}
+
+/**
+ * Client-safe portal bootstrap: only updates/courses admin explicitly
+ * opted into the client view (showToClients), no progress/quiz/cert
+ * fields at all — clients never register, track progress, or take a
+ * knowledge check.
+ */
+function apiClientGetBootstrap() {
+  var updates = readRows('Updates')
+    .filter(function (u) { return u.status === 'published' && isTrue(u.showToClients); })
+    .map(function (u) { return { updateId: u.updateId, title: u.title, summary: u.summary, publishedAt: iso(u.publishedAt) }; })
+    .sort(function (a, b) { return b.publishedAt < a.publishedAt ? -1 : 1; });
+
+  var courses = readRows('Courses')
+    .filter(function (c) { return c.status === 'open' && isTrue(c.showToClients); })
+    .map(function (c) {
+      return { courseId: c.courseId, title: c.title, description: c.description,
+               taskCount: Number(c.taskCount) || 0,
+               publishedAt: iso(c.publishedAt), createdAt: iso(c.createdAt) };
+    })
+    .sort(function (a, b) { return (b.publishedAt || b.createdAt) < (a.publishedAt || a.createdAt) ? -1 : 1; });
+
+  return { updates: updates, courses: courses, settingsLite: { firmName: getSetting('firmName') || 'Magnum CPA Academy' } };
+}
+
+/** Single client-visible course: video + lesson content only, no quiz. */
+function apiClientGetCourse(p) {
+  var meta = getCourseMeta(p.courseId);
+  if (meta.status !== 'open' || !isTrue(meta.showToClients)) throw new Error('Course not found.');
+  var course = readCourseJson(p.courseId);
+  var tasks = (course.tasks || []).map(function (t) {
+    return { taskId: t.taskId, title: t.title, video: t.video, contentHtml: t.contentHtml };
+  });
+  return { meta: { courseId: meta.courseId, title: meta.title, description: meta.description }, tasks: tasks };
 }
 
 function apiRegisterCourse(p, session) {
@@ -581,7 +672,8 @@ function apiAdminSaveCourse(p) {
       courseId: courseId, title: title, description: String(c.description || ''), status: status,
       registrationFormUrl: String(c.registrationFormUrl || ''), passThresholdPct: threshold,
       taskCount: tasks.length, questionCount: quiz.length,
-      createdAt: now, updatedAt: now, publishedAt: status === 'open' ? now : ''
+      createdAt: now, updatedAt: now, publishedAt: status === 'open' ? now : '',
+      showToClients: 'FALSE'
     });
   }
   writeChunks('CourseData', 'courseId', courseId, json);
@@ -653,7 +745,8 @@ function apiAdminSaveUpdate(p) {
     updateId = 'upd-' + Utilities.getUuid();
     appendRow('Updates', {
       updateId: updateId, title: title, summary: String(p.summary || ''),
-      status: status, createdAt: now, publishedAt: status === 'published' ? now : ''
+      status: status, createdAt: now, publishedAt: status === 'published' ? now : '',
+      showToClients: 'FALSE'
     });
   }
   writeChunks('UpdateData', 'updateId', updateId, bodyHtml);
@@ -807,6 +900,31 @@ function apiAdminSaveSettings(p) {
   return apiAdminGetSettings();
 }
 
+/** Flips whether a course appears in the client portal, without touching its content. */
+function apiAdminSetCourseClientVisibility(p) {
+  getCourseMeta(p.courseId); // throws if missing
+  updateRowsWhere('Courses', function (r) { return r.courseId === p.courseId; },
+    { showToClients: p.showToClients ? 'TRUE' : 'FALSE' });
+  return {};
+}
+
+/** Flips whether an update appears in the client portal. */
+function apiAdminSetUpdateClientVisibility(p) {
+  var existing = readRows('Updates').filter(function (r) { return r.updateId === p.updateId; })[0];
+  if (!existing) throw new Error('Update not found.');
+  updateRowsWhere('Updates', function (r) { return r.updateId === p.updateId; },
+    { showToClients: p.showToClients ? 'TRUE' : 'FALSE' });
+  return {};
+}
+
+/** Recent client-portal visits (name + when) for the Settings page. */
+function apiAdminGetClientAccessLog() {
+  return readRows('ClientAccessLog')
+    .map(function (r) { return { name: r.name, accessedAt: iso(r.accessedAt) }; })
+    .sort(function (a, b) { return b.accessedAt < a.accessedAt ? -1 : 1; })
+    .slice(0, 50);
+}
+
 /**
  * Sends an email as the Google account that owns this script (i.e. the
  * admin's own Gmail/Workspace address) via GmailApp — no SMTP credentials
@@ -844,6 +962,7 @@ function metaToClient(meta) {
     courseId: meta.courseId, title: meta.title, description: meta.description, status: meta.status,
     registrationFormUrl: meta.registrationFormUrl, passThresholdPct: Number(meta.passThresholdPct) || 85,
     taskCount: Number(meta.taskCount) || 0, questionCount: Number(meta.questionCount) || 0,
+    showToClients: isTrue(meta.showToClients),
     createdAt: iso(meta.createdAt), updatedAt: iso(meta.updatedAt), publishedAt: iso(meta.publishedAt)
   };
 }

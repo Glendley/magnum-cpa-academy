@@ -11,6 +11,36 @@ function escapeHtml(value) {
     .replace(/'/g, '&#39;');
 }
 
+/**
+ * Overlays a faint, repeating "{name} · {date time}" watermark across
+ * the whole page. This is a deterrent, not a technical protection — no
+ * website can block screenshots or screen recording, since capture
+ * happens at the OS level. The point is that any leaked screenshot is
+ * traceable to who took it. Call once per page load on course-viewing
+ * pages (course.html, client-course.html).
+ */
+function applyWatermark(name) {
+  if (document.getElementById('mca-watermark')) return;
+  var now = new Date();
+  var label = String(name || 'Magnum CPA Academy') + '   ' +
+    now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) + ' ' +
+    now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+
+  var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="420" height="220">' +
+    '<text x="0" y="120" transform="rotate(-28 210 110)" ' +
+    'font-family="Arial, sans-serif" font-size="20" font-weight="700" ' +
+    'fill="rgba(255,255,255,0.09)">' + escapeHtml(label) + '</text></svg>';
+  // btoa() only handles Latin1 — this is the standard trick for UTF-8-safe base64.
+  var dataUri = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svg)));
+
+  var el = document.createElement('div');
+  el.id = 'mca-watermark';
+  el.style.cssText =
+    'position:fixed;inset:0;z-index:400;pointer-events:none;' +
+    'background-image:url("' + dataUri + '");background-repeat:repeat;';
+  document.body.appendChild(el);
+}
+
 function fmtDate(isoString) {
   if (!isoString) return '';
   var d = new Date(isoString);

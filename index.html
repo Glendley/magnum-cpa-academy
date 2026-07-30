@@ -36,6 +36,9 @@
   <div class="login-footer" id="login-footer">
     Employee access is created by your administrator.
   </div>
+  <div class="login-footer">
+    <a href="client-login.html">Client login &rarr;</a>
+  </div>
 </div>
 
 <script src="js/config.js"></script>
@@ -48,7 +51,8 @@
   // Already signed in? Go straight to the right portal.
   var user = getUserCached();
   if (getToken() && user) {
-    window.location.replace(user.role === 'admin' ? 'admin.html' : 'app.html');
+    var dest = user.role === 'admin' ? 'admin.html' : user.role === 'client' ? 'client.html' : 'app.html';
+    window.location.replace(dest);
     return;
   }
 
